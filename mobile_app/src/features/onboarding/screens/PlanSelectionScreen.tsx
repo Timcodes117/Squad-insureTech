@@ -1,3 +1,5 @@
+import { ScreenPlaceholder } from '@/shared/components/ScreenPlaceholder';
+
 export default function PlanSelectionScreen() {
-  return null;
+  return <ScreenPlaceholder title="Plan selection" />;
 }

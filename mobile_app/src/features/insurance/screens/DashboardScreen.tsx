@@ -1,3 +1,5 @@
+import { ScreenPlaceholder } from '@/shared/components/ScreenPlaceholder';
+
 export default function DashboardScreen() {
-  return null;
+  return <ScreenPlaceholder title="Home" />;
 }

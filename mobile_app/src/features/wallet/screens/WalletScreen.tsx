@@ -1,3 +1,5 @@
+import { ScreenPlaceholder } from '@/shared/components/ScreenPlaceholder';
+
 export default function WalletScreen() {
-  return null;
+  return <ScreenPlaceholder title="Wallet" />;
 }

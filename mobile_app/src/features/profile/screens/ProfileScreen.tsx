@@ -1,3 +1,5 @@
+import { ScreenPlaceholder } from '@/shared/components/ScreenPlaceholder';
+
 export default function ProfileScreen() {
-  return null;
+  return <ScreenPlaceholder title="Profile" />;
 }
