@@ -1,1 +1,1 @@
-export {};
+export { AuthScreenLayout } from './AuthScreenLayout';

@@ -1,0 +1,197 @@
+export const REGISTRATION_STEPS = [
+  {
+    id: 'full_name',
+    progressLabel: 'Name',
+    title: 'What is your name?',
+    subtitle: 'Enter your first name, middle name if you have one, and last name.',
+    voiceLine: 'What is your name? Enter your first name, your middle name if you have one, and your last name.',
+  },
+  {
+    id: 'phone',
+    progressLabel: 'Phone',
+    title: 'Your phone number',
+    subtitle: 'We use it to sign you in, verify hospitals, and help you recover your account. You will also use a password and a text code when you sign in.',
+    voiceLine: 'Enter the phone number you use.',
+  },
+  {
+    id: 'otp',
+    progressLabel: 'Code',
+    title: 'Enter your code',
+    subtitle: 'We sent a 6-digit code by SMS. It may take a minute.',
+    voiceLine: 'Enter the six digit code we sent to your phone.',
+  },
+  {
+    id: 'password',
+    progressLabel: 'Password',
+    title: 'Create a password',
+    subtitle: 'Use at least 8 characters. You will sign in with your phone number, this password, and a code we text you.',
+    voiceLine: 'Choose a password with at least eight characters, then type it again to confirm.',
+  },
+  {
+    id: 'face_intro',
+    progressLabel: 'Face',
+    title: 'Confirm your face',
+    subtitle:
+      'We want to protect your health account. Let’s confirm it’s really you—this is quick and simple. Your picture is safe and only used to protect your account.',
+    voiceLine: 'We need to confirm your face to protect your account. Tap continue when you are ready.',
+  },
+  {
+    id: 'face_scan',
+    progressLabel: 'Face',
+    title: 'Take a clear face picture',
+    subtitle: 'Look at the camera clearly.',
+    voiceLine: 'Look straight at the camera. Move a little closer if needed. Good lighting helps.',
+  },
+  {
+    id: 'nin',
+    progressLabel: 'NIN',
+    title: 'National ID (NIN)',
+    subtitle: 'Your eleven-digit National Identification Number helps us keep your account safe.',
+    voiceLine: 'Please enter your NIN, the eleven digit number on your national ID.',
+  },
+  {
+    id: 'age_range',
+    progressLabel: 'Age',
+    title: 'Your age range',
+    subtitle: 'Pick the range that fits you best.',
+    voiceLine: 'Which age range are you in?',
+  },
+  {
+    id: 'gender',
+    progressLabel: 'Gender',
+    title: 'How should we refer to you?',
+    subtitle: 'Pick one option below.',
+    voiceLine: 'How should we refer to you?',
+  },
+  {
+    id: 'state',
+    progressLabel: 'Location',
+    title: 'State / market area',
+    subtitle: 'Choose your state or main market area. You can add more detail later.',
+    voiceLine: 'Which state or market area are you in?',
+  },
+  {
+    id: 'payment_frequency',
+    progressLabel: 'Payments',
+    title: 'How do you want to pay?',
+    subtitle: 'A small weekly payment, or a monthly payment—pick what feels easier.',
+    voiceLine: 'Do you want to pay weekly or monthly?',
+  },
+  {
+    id: 'plan',
+    progressLabel: 'Plan',
+    title: 'Your cover',
+    subtitle: 'We start with one simple plan so it stays easy to understand.',
+    voiceLine: 'Here is your starter health cover plan.',
+  },
+  {
+    id: 'review',
+    progressLabel: 'Review',
+    title: 'Review your details',
+    subtitle: 'Check that everything looks right before we create your account.',
+    voiceLine: 'Please review your details before we continue.',
+  },
+  {
+    id: 'creating',
+    progressLabel: 'Creating',
+    title: 'Creating your account',
+    subtitle: 'Please wait a moment while we set things up for you.',
+    voiceLine: 'Please wait while we create your account and wallet.',
+  },
+  {
+    id: 'wallet',
+    progressLabel: 'Wallet',
+    title: 'Your health wallet is ready',
+    subtitle: 'Save these details somewhere safe.',
+    voiceLine: 'Your health wallet is ready. Note your account number.',
+  },
+  {
+    id: 'success',
+    progressLabel: 'Done',
+    title: 'You are all set',
+    subtitle: 'Welcome to calmer hospital visits when you need them.',
+    voiceLine: 'You are all set. Welcome.',
+  },
+] as const;
+
+export type RegistrationStepId = (typeof REGISTRATION_STEPS)[number]['id'];
+
+export const REGISTRATION_TOTAL_STEPS = REGISTRATION_STEPS.length;
+
+export function registrationStepIndex(id: RegistrationStepId): number {
+  const i = REGISTRATION_STEPS.findIndex((s) => s.id === id);
+  return i >= 0 ? i : 0;
+}
+
+export const AGE_RANGE_OPTIONS = [
+  { id: '18-25', label: '18–25' },
+  { id: '26-40', label: '26–40' },
+  { id: '41-60', label: '41–60' },
+  { id: '60+', label: '60+' },
+] as const;
+
+export const GENDER_OPTIONS = [
+  { id: 'female', label: 'Female' },
+  { id: 'male', label: 'Male' },
+  { id: 'prefer_not', label: 'Prefer not to say' },
+] as const;
+
+export const PAYMENT_OPTIONS = [
+  {
+    id: 'weekly' as const,
+    label: 'Weekly',
+    hint: 'Smaller amounts, more often',
+  },
+  {
+    id: 'monthly' as const,
+    label: 'Monthly',
+    hint: 'One payment each month',
+  },
+];
+
+export const STARTER_PLAN = {
+  id: 'starter_shield',
+  name: 'Starter Shield',
+  coverageLabel: '₦20,000 coverage',
+  bullets: ['Help with hospital bills when you need it', 'Simple rules—built for everyday life', 'One wallet for your payments'],
+} as const;
+
+export const NIGERIAN_STATES = [
+  'Abia',
+  'Adamawa',
+  'Akwa Ibom',
+  'Anambra',
+  'Bauchi',
+  'Bayelsa',
+  'Benue',
+  'Borno',
+  'Cross River',
+  'Delta',
+  'Ebonyi',
+  'Edo',
+  'Ekiti',
+  'Enugu',
+  'FCT',
+  'Gombe',
+  'Imo',
+  'Jigawa',
+  'Kaduna',
+  'Kano',
+  'Katsina',
+  'Kebbi',
+  'Kogi',
+  'Kwara',
+  'Lagos',
+  'Nasarawa',
+  'Niger',
+  'Ogun',
+  'Ondo',
+  'Osun',
+  'Oyo',
+  'Plateau',
+  'Rivers',
+  'Sokoto',
+  'Taraba',
+  'Yobe',
+  'Zamfara',
+] as const;

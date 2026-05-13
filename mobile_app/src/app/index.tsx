@@ -1,1 +1,4 @@
-export { default } from '@/features/onboarding/screens/AppIndexScreen';
+import AppIndexScreen from '@/features/onboarding/screens/AppIndexScreen';
+
+export default AppIndexScreen;
+ 
