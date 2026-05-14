@@ -4,6 +4,8 @@ export const theme = {
   colors: {
     background: '#ffffff',
     foreground: '#0a0a0a',
+    brand: '#2563eb',
+    brandMuted: '#dbeafe',
   },
 } as const;
 

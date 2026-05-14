@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "MyBodyCover",
-    "slug": "mybodycover",
-    "scheme": "mybodycover",
+    "name": "BetaHealth",
+    "slug": "betahealth",
+    "scheme": "betahealth",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mybodycover.app"
+      "bundleIdentifier": "com.betahealth.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.mybodycover.app"
+      "package": "com.betahealth.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",

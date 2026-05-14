@@ -9,7 +9,7 @@ import { useLoginFlowStore } from '@/features/auth/loginFlowStore';
 import { LabeledTextInput } from '@/features/auth/registration/LabeledTextInput';
 import { Text } from '@/shared/typography/Text';
 
-const ACCENT = '#6D28D9';
+const ACCENT = '#2563eb';
 
 function formatPhoneDisplay(digits: string) {
   return digits.replace(/\D/g, '').slice(0, 11);
@@ -103,7 +103,7 @@ export default function LoginScreen() {
         onPress={() => router.push('/(auth)/register')}
         className="mt-8 self-center py-2 active:opacity-80"
       >
-        <Text className="text-center text-base font-semibold text-violet-700">Need an account? Register</Text>
+        <Text className="text-center text-base font-semibold text-brand-700">Need an account? Register</Text>
       </Pressable>
     </AuthScreenLayout>
   );

@@ -7,6 +7,7 @@ type Props = {
   className?: string;
   variant?: 'primary' | 'outline' | 'accent';
   onPress?: () => void;
+  disabled?: boolean;
 };
 
 // TODO: disabled + loading states.
@@ -14,7 +15,7 @@ type Props = {
 const variantClass: Record<NonNullable<Props['variant']>, string> = {
   primary: 'rounded-2xl bg-neutral-900 px-5 py-4 active:opacity-90',
   outline: 'rounded-2xl border border-neutral-300 bg-white px-5 py-4 active:bg-neutral-50',
-  accent: 'rounded-full bg-violet-600 px-5 py-4 active:opacity-90',
+  accent: 'rounded-full bg-brand-600 px-5 py-4 active:opacity-90',
 };
 
 const variantTextClass: Record<NonNullable<Props['variant']>, string> = {
@@ -23,11 +24,18 @@ const variantTextClass: Record<NonNullable<Props['variant']>, string> = {
   accent: 'text-center text-base font-semibold text-white',
 };
 
-export function Button({ title, className, variant = 'primary', onPress }: Props) {
+export function Button({ title, className, variant = 'primary', onPress, disabled }: Props) {
   const box = className ?? variantClass[variant];
   const textClass = variantTextClass[variant];
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} className={box}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      className={box}
+      style={disabled ? { opacity: 0.45 } : undefined}
+    >
       <Text className={textClass}>{title}</Text>
     </Pressable>
   );

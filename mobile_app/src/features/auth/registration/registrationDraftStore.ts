@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { secureStorage } from '@/core/storage/secureStorage';
 import { STORAGE_KEYS } from '@/core/storage/storageKeys';
 
-import { STARTER_PLAN } from './registrationConstants';
+import { DEFAULT_PLAN_ID, LEGACY_STARTER_PLAN_ID, planById, planForTier, tierForOccupationId } from './registrationConstants';
 
 export type PaymentFrequency = 'weekly' | 'monthly';
 
@@ -18,6 +18,7 @@ type PersistedDraft = {
   gender: string | null;
   state: string | null;
   paymentFrequency: PaymentFrequency | null;
+  occupationId: string | null;
   planId: string | null;
   otpVerified: boolean;
   faceDone: boolean;
@@ -42,7 +43,8 @@ const defaultPersist: PersistedDraft = {
   gender: null,
   state: null,
   paymentFrequency: null,
-  planId: STARTER_PLAN.id,
+  occupationId: null,
+  planId: DEFAULT_PLAN_ID,
   otpVerified: false,
   faceDone: false,
 };
@@ -59,6 +61,7 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
     gender: s.gender,
     state: s.state,
     paymentFrequency: s.paymentFrequency,
+    occupationId: s.occupationId,
     planId: s.planId,
     otpVerified: s.otpVerified,
     faceDone: s.faceDone,
@@ -67,6 +70,16 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
 
 async function writeDraft(p: PersistedDraft) {
   await secureStorage.setItem(STORAGE_KEYS.registrationDraft, JSON.stringify(p));
+}
+
+function migratePlanId(raw: unknown): string {
+  if (raw === LEGACY_STARTER_PLAN_ID) {
+    return DEFAULT_PLAN_ID;
+  }
+  if (typeof raw === 'string' && planById(raw)) {
+    return raw;
+  }
+  return DEFAULT_PLAN_ID;
 }
 
 function migrateLegacyNameFields(parsed: Record<string, unknown>): Pick<PersistedDraft, 'firstName' | 'middleName' | 'lastName'> {
@@ -110,10 +123,17 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
       const restCopy = { ...parsed };
       delete restCopy.fullName;
       const rest = restCopy as Partial<PersistedDraft>;
+      const occupationRaw = parsed.occupationId;
+      const occupationId = typeof occupationRaw === 'string' && occupationRaw.length > 0 ? occupationRaw : null;
+      const planId = migratePlanId(parsed.planId);
+      const tier = tierForOccupationId(occupationId);
+      const syncedPlanId = tier ? planForTier(tier).id : planId;
       set({
         ...defaultPersist,
         ...rest,
         ...names,
+        occupationId,
+        planId: syncedPlanId,
         hydrated: true,
       });
     } catch {
@@ -123,7 +143,13 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
 
   updateDraft: (patch) => {
     set((prev) => {
-      const next = { ...prev, ...patch };
+      let next: RegistrationDraftState = { ...prev, ...patch };
+      if (patch.occupationId !== undefined && patch.occupationId !== prev.occupationId) {
+        const tier = tierForOccupationId(patch.occupationId);
+        if (tier) {
+          next = { ...next, planId: planForTier(tier).id };
+        }
+      }
       void writeDraft(pickPersisted(next));
       return next;
     });

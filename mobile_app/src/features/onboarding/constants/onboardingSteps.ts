@@ -10,6 +10,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'welcome',
     title: 'Welcome',
-    description: 'Tap play to hear a short hello in the language you chose.',
+    description:
+      'BetaHealth is weekly micro-cover for informal workers: fund your wallet, visit partner hospitals for primary care, and walk through the gate with less cash stress (demo app).',
   },
 ];

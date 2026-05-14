@@ -78,11 +78,18 @@ export const REGISTRATION_STEPS = [
     voiceLine: 'Do you want to pay weekly or monthly?',
   },
   {
+    id: 'occupation',
+    progressLabel: 'Work',
+    title: 'What kind of work do you do?',
+    subtitle: 'This helps us assign the right weekly amount for your cover tier—same hospital help for everyone.',
+    voiceLine: 'Pick the option that best matches your main work.',
+  },
+  {
     id: 'plan',
     progressLabel: 'Plan',
-    title: 'Your cover',
-    subtitle: 'We start with one simple plan so it stays easy to understand.',
-    voiceLine: 'Here is your starter health cover plan.',
+    title: 'Your BetaHealth plan',
+    subtitle: 'Three tiers, same ₦20,000 monthly hospital help. Your job type sets which weekly amount applies.',
+    voiceLine: 'Here is the health cover plan for your work type.',
   },
   {
     id: 'review',
@@ -95,13 +102,13 @@ export const REGISTRATION_STEPS = [
     id: 'creating',
     progressLabel: 'Creating',
     title: 'Creating your account',
-    subtitle: 'Please wait a moment while we set things up for you.',
+    subtitle: 'Please wait a moment while we set up your BetaHealth wallet.',
     voiceLine: 'Please wait while we create your account and wallet.',
   },
   {
     id: 'wallet',
     progressLabel: 'Wallet',
-    title: 'Your health wallet is ready',
+    title: 'Your BetaHealth wallet is ready',
     subtitle: 'Save these details somewhere safe.',
     voiceLine: 'Your health wallet is ready. Note your account number.',
   },
@@ -109,7 +116,7 @@ export const REGISTRATION_STEPS = [
     id: 'success',
     progressLabel: 'Done',
     title: 'You are all set',
-    subtitle: 'Welcome to calmer hospital visits when you need them.',
+    subtitle: 'Welcome to BetaHealth—weekly micro-cover for everyday hospital bills.',
     voiceLine: 'You are all set. Welcome.',
   },
 ] as const;
@@ -149,12 +156,97 @@ export const PAYMENT_OPTIONS = [
   },
 ];
 
-export const STARTER_PLAN = {
-  id: 'starter_shield',
-  name: 'Starter Shield',
-  coverageLabel: '₦20,000 coverage',
-  bullets: ['Help with hospital bills when you need it', 'Simple rules—built for everyday life', 'One wallet for your payments'],
-} as const;
+export type RiskTier = 'low' | 'medium' | 'high';
+
+export const BETAHEALTH_PLANS = [
+  {
+    id: 'plan_basic',
+    tier: 'low' as const,
+    name: 'Basic',
+    weeklyNaira: 500,
+    monthlyCapNaira: 20_000,
+    audience: 'Office workers, students, teachers, traders',
+    bullets: [
+      '₦20,000/month cap for partner-hospital primary care',
+      'Malaria, typhoid, consults, minor injuries—see coverage tab',
+      'Premium burns weekly from your wallet when funded',
+    ],
+  },
+  {
+    id: 'plan_standard',
+    tier: 'medium' as const,
+    name: 'Standard',
+    weeklyNaira: 750,
+    monthlyCapNaira: 20_000,
+    audience: 'Vendors, tailors, hairdressers, cooks, farmers',
+    bullets: [
+      'Same ₦20,000 monthly cap as Basic and High-Risk',
+      'Higher weekly amount matches medium-risk occupations',
+      'Instant settlement story at partner hospitals',
+    ],
+  },
+  {
+    id: 'plan_high_risk',
+    tier: 'high' as const,
+    name: 'High-Risk',
+    weeklyNaira: 1000,
+    monthlyCapNaira: 20_000,
+    audience: 'Bricklayers, welders, drivers, mechanics, security',
+    bullets: [
+      'Same ₦20,000 monthly cap—fair cover for higher-risk jobs',
+      'Pay-to-activate: cover starts after your first wallet funding',
+      'First week has a lower cap until your cover fully opens',
+    ],
+  },
+] as const;
+
+export type BetaHealthPlan = (typeof BETAHEALTH_PLANS)[number];
+
+/** @deprecated Legacy id from single-plan registration; maps to Basic. */
+export const LEGACY_STARTER_PLAN_ID = 'starter_shield';
+
+export const DEFAULT_PLAN_ID: BetaHealthPlan['id'] = 'plan_basic';
+
+export function planForTier(tier: RiskTier): BetaHealthPlan {
+  const p = BETAHEALTH_PLANS.find((x) => x.tier === tier);
+  return p ?? BETAHEALTH_PLANS[0];
+}
+
+export function planById(id: string | null | undefined): BetaHealthPlan | null {
+  if (!id) {
+    return null;
+  }
+  return BETAHEALTH_PLANS.find((p) => p.id === id) ?? null;
+}
+
+export { formatNaira } from '@/shared/format/naira';
+
+export const OCCUPATION_OPTIONS = [
+  { id: 'office', label: 'Office / desk work', tier: 'low' as const, hint: 'Low risk' },
+  { id: 'student', label: 'Student', tier: 'low' as const, hint: 'Low risk' },
+  { id: 'teacher', label: 'Teacher', tier: 'low' as const, hint: 'Low risk' },
+  { id: 'trader', label: 'Trader / shop owner', tier: 'low' as const, hint: 'Low risk' },
+  { id: 'vendor', label: 'Market vendor', tier: 'medium' as const, hint: 'Medium risk' },
+  { id: 'tailor', label: 'Tailor / fashion', tier: 'medium' as const, hint: 'Medium risk' },
+  { id: 'hairdresser', label: 'Hairdresser / barber', tier: 'medium' as const, hint: 'Medium risk' },
+  { id: 'cook', label: 'Cook / caterer', tier: 'medium' as const, hint: 'Medium risk' },
+  { id: 'farmer', label: 'Farmer', tier: 'medium' as const, hint: 'Medium risk' },
+  { id: 'bricklayer', label: 'Bricklayer / construction', tier: 'high' as const, hint: 'High risk' },
+  { id: 'welder', label: 'Welder / metal work', tier: 'high' as const, hint: 'High risk' },
+  { id: 'driver', label: 'Driver / rider', tier: 'high' as const, hint: 'High risk' },
+  { id: 'mechanic', label: 'Mechanic', tier: 'high' as const, hint: 'High risk' },
+  { id: 'security', label: 'Security', tier: 'high' as const, hint: 'High risk' },
+] as const;
+
+export type OccupationOption = (typeof OCCUPATION_OPTIONS)[number];
+
+export function tierForOccupationId(occupationId: string | null): RiskTier | null {
+  if (!occupationId) {
+    return null;
+  }
+  const o = OCCUPATION_OPTIONS.find((x) => x.id === occupationId);
+  return o?.tier ?? null;
+}
 
 export const NIGERIAN_STATES = [
   'Abia',

@@ -14,18 +14,23 @@ import { RadioTileGroup } from './RadioTileGroup';
 import { RegistrationShell } from './RegistrationShell';
 import {
   AGE_RANGE_OPTIONS,
+  BETAHEALTH_PLANS,
   GENDER_OPTIONS,
   NIGERIAN_STATES,
+  OCCUPATION_OPTIONS,
   PAYMENT_OPTIONS,
   REGISTRATION_STEPS,
   REGISTRATION_TOTAL_STEPS,
-  STARTER_PLAN,
+  formatNaira,
+  planById,
+  planForTier,
   registrationStepIndex,
+  tierForOccupationId,
 } from './registrationConstants';
 import { useRegistrationDraftStore } from './registrationDraftStore';
 import { useRegistrationStepVoice } from './useRegistrationStepVoice';
 
-const CONTINUE_PURPLE = '#6D28D9';
+const CONTINUE_ACCENT = '#2563eb';
 
 function formatPhoneDisplay(digits: string) {
   const d = digits.replace(/\D/g, '').slice(0, 11);
@@ -55,6 +60,7 @@ export default function RegisterFlowScreen() {
   const gender = useRegistrationDraftStore((s) => s.gender);
   const state = useRegistrationDraftStore((s) => s.state);
   const paymentFrequency = useRegistrationDraftStore((s) => s.paymentFrequency);
+  const occupationId = useRegistrationDraftStore((s) => s.occupationId);
   const planId = useRegistrationDraftStore((s) => s.planId);
 
   const [otpInput, setOtpInput] = useState('');
@@ -108,6 +114,8 @@ export default function RegisterFlowScreen() {
   }, [stateQuery]);
 
   const walletNumber = useMemo(() => fakeWalletAccount(phoneDigits), [phoneDigits]);
+
+  const selectedPlan = useMemo(() => planById(planId), [planId]);
 
   const displayFullName = useMemo(
     () => [firstName, middleName, lastName].map((s) => s.trim()).filter(Boolean).join(' '),
@@ -174,8 +182,13 @@ export default function RegisterFlowScreen() {
         return Boolean(state);
       case 'payment_frequency':
         return paymentFrequency === 'weekly' || paymentFrequency === 'monthly';
-      case 'plan':
-        return Boolean(planId);
+      case 'occupation':
+        return Boolean(occupationId);
+      case 'plan': {
+        const tier = tierForOccupationId(occupationId);
+        const p = planById(planId);
+        return Boolean(tier && p && p.tier === tier);
+      }
       case 'review':
         return true;
       case 'creating':
@@ -187,7 +200,22 @@ export default function RegisterFlowScreen() {
       default:
         return false;
     }
-  }, [stepMeta.id, firstName, lastName, phoneDigits, otpInput, password, passwordConfirm, nin, ageRange, gender, state, paymentFrequency, planId]);
+  }, [
+    stepMeta.id,
+    firstName,
+    lastName,
+    phoneDigits,
+    otpInput,
+    password,
+    passwordConfirm,
+    nin,
+    ageRange,
+    gender,
+    state,
+    paymentFrequency,
+    occupationId,
+    planId,
+  ]);
 
   const onPrimaryPress = useCallback(() => {
     switch (stepMeta.id) {
@@ -216,7 +244,7 @@ export default function RegisterFlowScreen() {
           setPassword('');
           setPasswordConfirm('');
           await clearDraft();
-          router.replace('/');
+          router.replace('/(tabs)/home');
         })();
         break;
       default:
@@ -230,7 +258,7 @@ export default function RegisterFlowScreen() {
   if (!hydrated) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color={CONTINUE_PURPLE} />
+        <ActivityIndicator size="large" color={CONTINUE_ACCENT} />
         <Text className="mt-3 text-sm text-neutral-500">Loading your saved progress…</Text>
       </View>
     );
@@ -254,7 +282,7 @@ export default function RegisterFlowScreen() {
         onPress={onPrimaryPress}
         className="mb-2 w-full items-center rounded-xl py-4 active:opacity-90"
         style={{
-          backgroundColor: CONTINUE_PURPLE,
+          backgroundColor: CONTINUE_ACCENT,
           opacity: !canContinue && stepMeta.id !== 'wallet' && stepMeta.id !== 'success' ? 0.45 : 1,
         }}
       >
@@ -322,7 +350,7 @@ export default function RegisterFlowScreen() {
               onPress={() => setResendSec(45)}
               className="self-center"
             >
-              <Text className={`text-sm font-semibold ${resendSec > 0 ? 'text-neutral-400' : 'text-violet-700'}`}>
+              <Text className={`text-sm font-semibold ${resendSec > 0 ? 'text-neutral-400' : 'text-brand-700'}`}>
                 {resendSec > 0 ? `Resend code in ${resendSec}s` : 'Resend code'}
               </Text>
             </Pressable>
@@ -428,7 +456,7 @@ export default function RegisterFlowScreen() {
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
                   >
-                    <Text className={`text-base ${selected ? 'font-semibold text-violet-800' : 'text-neutral-900'}`}>{st}</Text>
+                    <Text className={`text-base ${selected ? 'font-semibold text-brand-800' : 'text-neutral-900'}`}>{st}</Text>
                   </Pressable>
                 );
               })}
@@ -445,23 +473,60 @@ export default function RegisterFlowScreen() {
           />
         ) : null}
 
+        {stepMeta.id === 'occupation' ? (
+          <RadioTileGroup
+            accessibilityLabel="Occupation type"
+            options={OCCUPATION_OPTIONS.map((o) => ({ id: o.id, label: o.label, hint: o.hint }))}
+            value={occupationId}
+            onChange={(id) => updateDraft({ occupationId: id })}
+          />
+        ) : null}
+
         {stepMeta.id === 'plan' ? (
-          <Pressable
-            onPress={() => updateDraft({ planId: STARTER_PLAN.id })}
-            className="gap-2 py-2 active:opacity-90"
-            accessibilityRole="button"
-            accessibilityState={{ selected: planId === STARTER_PLAN.id }}
-          >
-            <Text className={`text-lg font-bold ${planId === STARTER_PLAN.id ? 'text-violet-800' : 'text-neutral-900'}`}>{STARTER_PLAN.name}</Text>
-            <Text className="text-base font-semibold text-violet-700">{STARTER_PLAN.coverageLabel}</Text>
-            <View className="mt-2 gap-2">
-              {STARTER_PLAN.bullets.map((b) => (
-                <Text key={b} className="text-sm leading-relaxed text-neutral-600">
-                  • {b}
-                </Text>
-              ))}
-            </View>
-          </Pressable>
+          <View className="gap-4">
+            {(() => {
+              const tier = tierForOccupationId(occupationId);
+              return BETAHEALTH_PLANS.map((plan) => {
+                const matchesJob = tier === plan.tier;
+                const selected = planId === plan.id;
+                return (
+                  <Pressable
+                    key={plan.id}
+                    disabled={!matchesJob}
+                    onPress={() => matchesJob && updateDraft({ planId: plan.id })}
+                    className={`rounded-2xl border-2 px-4 py-4 ${
+                      selected && matchesJob
+                        ? 'border-brand-600 bg-brand-50'
+                        : matchesJob
+                          ? 'border-neutral-200 bg-white active:bg-neutral-50'
+                          : 'border-neutral-100 bg-neutral-50 opacity-60'
+                    }`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selected && matchesJob, disabled: !matchesJob }}
+                  >
+                    <View className="flex-row items-baseline justify-between gap-2">
+                      <Text className={`text-lg font-bold ${selected && matchesJob ? 'text-brand-900' : 'text-neutral-900'}`}>{plan.name}</Text>
+                      <Text className="text-base font-semibold text-brand-700">{formatNaira(plan.weeklyNaira)}/wk</Text>
+                    </View>
+                    <Text className="mt-1 text-sm text-neutral-600">{plan.audience}</Text>
+                    <Text className="mt-2 text-xs font-medium uppercase tracking-wide text-neutral-400">
+                      {formatNaira(plan.monthlyCapNaira)} monthly cap
+                    </Text>
+                    {!matchesJob ? (
+                      <Text className="mt-2 text-xs text-neutral-500">Based on your work type, your tier is {tier ? planForTier(tier).name : '—'}.</Text>
+                    ) : null}
+                    <View className="mt-3 gap-1.5">
+                      {plan.bullets.map((b) => (
+                        <Text key={b} className="text-sm leading-relaxed text-neutral-600">
+                          • {b}
+                        </Text>
+                      ))}
+                    </View>
+                  </Pressable>
+                );
+              });
+            })()}
+          </View>
         ) : null}
 
         {stepMeta.id === 'review' ? (
@@ -482,38 +547,59 @@ export default function RegisterFlowScreen() {
               value={paymentFrequency === 'weekly' ? 'Weekly' : paymentFrequency === 'monthly' ? 'Monthly' : '—'}
               onEdit={() => goToStep(registrationStepIndex('payment_frequency'))}
             />
-            <ReviewRow label="Plan" value={STARTER_PLAN.name} onEdit={() => goToStep(registrationStepIndex('plan'))} />
+            <ReviewRow
+              label="Work type"
+              value={OCCUPATION_OPTIONS.find((o) => o.id === occupationId)?.label ?? '—'}
+              onEdit={() => goToStep(registrationStepIndex('occupation'))}
+            />
+            <ReviewRow
+              label="Plan"
+              value={selectedPlan ? `${selectedPlan.name} (${formatNaira(selectedPlan.weeklyNaira)}/wk)` : '—'}
+              onEdit={() => goToStep(registrationStepIndex('plan'))}
+            />
           </View>
         ) : null}
 
         {stepMeta.id === 'creating' ? (
           <View className="items-center py-16">
-            <ActivityIndicator size="large" color={CONTINUE_PURPLE} />
+            <ActivityIndicator size="large" color={CONTINUE_ACCENT} />
             <Text className="mt-6 text-center text-base text-neutral-600">Creating your profile…</Text>
-            <Text className="mt-2 text-center text-sm text-neutral-500">Setting up your wallet and hospital card.</Text>
+            <Text className="mt-2 text-center text-sm text-neutral-500">Setting up your BetaHealth wallet and cover profile.</Text>
           </View>
         ) : null}
 
         {stepMeta.id === 'wallet' ? (
           <View className="gap-4 py-2">
-            <Text className="text-sm font-medium text-neutral-500">Virtual account</Text>
+            <Text className="text-sm font-medium text-neutral-500">BetaHealth virtual account</Text>
             <Text className="text-2xl font-bold tracking-wide text-neutral-900">{walletNumber}</Text>
-            <Text className="text-base text-neutral-600">Partner Bank</Text>
+            <Text className="text-base text-neutral-600">Partner bank (Squad)</Text>
             <View className="my-2 h-px bg-neutral-100" />
             <Text className="text-sm text-neutral-600">
-              Coverage: <Text className="font-semibold text-neutral-900">{STARTER_PLAN.name}</Text> — {STARTER_PLAN.coverageLabel}
+              Plan:{' '}
+              <Text className="font-semibold text-neutral-900">
+                {selectedPlan?.name ?? '—'}
+                {selectedPlan ? ` — ${formatNaira(selectedPlan.weeklyNaira)} weekly` : ''}
+              </Text>
+              {selectedPlan ? (
+                <Text className="text-neutral-600">
+                  {' '}
+                  · {formatNaira(selectedPlan.monthlyCapNaira)} monthly hospital help cap
+                </Text>
+              ) : null}
             </Text>
-            <Text className="text-xs leading-relaxed text-neutral-500">You can fund this wallet with transfers from your bank app.</Text>
+            <Text className="text-xs leading-relaxed text-neutral-500">
+              Fund this account from your bank app. Cover turns on after your first successful payment (demo).
+            </Text>
           </View>
         ) : null}
 
         {stepMeta.id === 'success' ? (
           <View className="items-center gap-4 py-10">
-            <View className="h-20 w-20 items-center justify-center rounded-full bg-violet-100">
+            <View className="h-20 w-20 items-center justify-center rounded-full bg-brand-100">
               <Text className="text-4xl">✓</Text>
             </View>
             <Text className="text-center text-base leading-relaxed text-neutral-600">
-              Your health wallet is ready. When you need care, your phone number and wallet help you move faster.
+              Welcome to BetaHealth. Fund your wallet to activate cover—partner hospitals can confirm you before care.
             </Text>
           </View>
         ) : null}
@@ -530,7 +616,7 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string; onE
         <Text className="mt-1 text-base text-neutral-900">{value}</Text>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} onPress={onEdit} hitSlop={8} className="py-1">
-        <Text className="text-sm font-semibold text-violet-700">Edit</Text>
+        <Text className="text-sm font-semibold text-brand-700">Edit</Text>
       </Pressable>
     </View>
   );

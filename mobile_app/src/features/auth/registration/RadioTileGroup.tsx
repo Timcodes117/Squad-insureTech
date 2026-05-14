@@ -31,13 +31,13 @@ export function RadioTileGroup({ options, value, onChange, accessibilityLabel }:
           >
             <View
               className={`mt-0.5 h-5 w-5 items-center justify-center rounded-full border-2 ${
-                selected ? 'border-violet-600' : 'border-neutral-300'
+                selected ? 'border-brand-600' : 'border-neutral-300'
               }`}
             >
-              {selected ? <View className="h-2.5 w-2.5 rounded-full bg-violet-600" /> : null}
+              {selected ? <View className="h-2.5 w-2.5 rounded-full bg-brand-600" /> : null}
             </View>
             <View className="flex-1">
-              <Text className={`text-base font-semibold ${selected ? 'text-violet-800' : 'text-neutral-900'}`}>{opt.label}</Text>
+              <Text className={`text-base font-semibold ${selected ? 'text-brand-800' : 'text-neutral-900'}`}>{opt.label}</Text>
               {opt.hint ? <Text className="mt-1 text-sm leading-snug text-neutral-500">{opt.hint}</Text> : null}
             </View>
           </Pressable>

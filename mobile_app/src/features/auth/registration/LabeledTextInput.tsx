@@ -41,7 +41,7 @@ export function LabeledTextInput({
     <View className="gap-1.5">
       <Text className="text-sm font-medium text-neutral-800">
         {label}
-        {required ? <Text className="text-violet-600">*</Text> : null}
+        {required ? <Text className="text-brand-600">*</Text> : null}
       </Text>
       <View className="min-h-[52px] flex-row items-center rounded-xl border border-neutral-200 bg-white px-3">
         {leftAccessory}

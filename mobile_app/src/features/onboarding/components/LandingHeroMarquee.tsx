@@ -16,9 +16,9 @@ const STRIP_HEIGHT_VH = 0.32;
 /** Sources shown in order; the strip is duplicated for a seamless loop. */
 const MARQUEE_SOURCES = [
   require('../../../../assets/woman.jpg'),
-  require('../../../../assets/icon.png'),
-  require('../../../../assets/woman.jpg'),
-  require('../../../../assets/icon.png'),
+  require('../../../../assets/doctor-smile.jpg'),
+  require('../../../../assets/pepper-woman.jpg'),
+  require('../../../../assets/nurse.webp'),
 ] as const;
 
 /** Horizontal scroll speed (pixels per second). */
@@ -55,7 +55,7 @@ export function LandingHeroMarquee({ pointerEvents = 'none' }: Props) {
     return () => {
       cancelAnimation(offsetX);
     };
-  }, [segmentWidth]);
+  }, [segmentWidth, offsetX]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offsetX.value }],

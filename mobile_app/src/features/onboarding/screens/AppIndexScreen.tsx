@@ -65,7 +65,8 @@ export default function AppIndexScreen() {
       <View className="z-10 flex-1">
         <View className="px-6 pt-4">
           <View className="items-center">
-            <Image accessibilityIgnoresInvertColors source={LOGO} className="h-12 w-12 rounded-xl opacity-90" resizeMode="contain" />
+            <Text className="text-xs font-bold uppercase tracking-[0.2em] text-brand-700">BetaHealth</Text>
+            <Image accessibilityIgnoresInvertColors source={LOGO} className="mt-2 h-12 w-12 rounded-xl opacity-90" resizeMode="contain" />
           </View>
         </View>
 
@@ -73,10 +74,11 @@ export default function AppIndexScreen() {
 
         <View className="mt-10 flex-1 px-6 pt-10">
           <Text className="text-left text-[12vw] font-black leading-[1.12] tracking-tight text-neutral-900 w-[90%]">
-            Small payment for hospital help when you need it.
+            Weekly savings. Hospital help when you fall sick.
           </Text>
           <Text className="mt-5 text-left text-base font-normal leading-relaxed text-neutral-500">
-            Simple cover you can trust—no fine print stress, just you looked after.
+            Pay small into your wallet, visit a partner clinic, and let BetaHealth settle the bill up to your monthly limit—built
+            for market traders, riders, and artisans across Nigeria.
           </Text>
         </View>
 

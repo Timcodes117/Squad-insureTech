@@ -27,7 +27,7 @@ export function RegistrationShell({
   onReplayVoice,
   voiceAvailable = false,
 }: Props) {
-  const stepNo = Math.min(stepIndex + 1, totalSteps);
+  const progress = totalSteps > 0 ? Math.min(1, Math.max(0, (stepIndex + 1) / totalSteps)) : 0;
   const body = scrollable ? (
     <ScrollView
       className="flex-1"
@@ -71,16 +71,21 @@ export function RegistrationShell({
                 onPress={onReplayVoice}
                 className="h-11 w-11 items-center justify-center rounded-full border border-neutral-200 bg-white active:bg-neutral-50"
               >
-                <Volume2 size={20} color="#6D28D9" />
+                <Volume2 size={20} color="#2563eb" />
               </Pressable>
             ) : (
               <View className="w-11" />
             )}
           </View>
 
-          <Text className="pb-1 text-center text-xs font-semibold uppercase tracking-wide text-neutral-400">
-            Step {stepNo} of {totalSteps}
-          </Text>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel="Registration progress"
+            accessibilityValue={{ min: 0, max: totalSteps, now: Math.min(stepIndex + 1, totalSteps) }}
+            className="mb-1 h-2.5 w-full overflow-hidden rounded-full bg-neutral-200"
+          >
+            <View className="h-full rounded-full bg-brand-600" style={{ width: `${progress * 100}%` }} />
+          </View>
 
           {body}
 

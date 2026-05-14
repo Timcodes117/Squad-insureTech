@@ -8,7 +8,7 @@ import { useLoginFlowStore } from '@/features/auth/loginFlowStore';
 import { OtpSixInput } from '@/features/auth/registration/OtpSixInput';
 import { Text } from '@/shared/typography/Text';
 
-const ACCENT = '#6D28D9';
+const ACCENT = '#2563eb';
 
 function normalizePhoneParam(phone: string | string[] | undefined): string {
   if (phone == null) {
@@ -52,7 +52,7 @@ export default function OtpScreen() {
 
   const onContinue = () => {
     clearLoginFlow();
-    router.replace('/');
+    router.replace('/(tabs)/home');
   };
 
   const displayPhone = phoneDigits ? `+234 ${phoneDigits}` : '';
@@ -94,7 +94,7 @@ export default function OtpScreen() {
           onPress={() => setResendSec(45)}
           className="self-center"
         >
-          <Text className={`text-sm font-semibold ${resendSec > 0 ? 'text-neutral-400' : 'text-violet-700'}`}>
+          <Text className={`text-sm font-semibold ${resendSec > 0 ? 'text-neutral-400' : 'text-brand-700'}`}>
             {resendSec > 0 ? `Resend code in ${resendSec}s` : 'Resend code'}
           </Text>
         </Pressable>

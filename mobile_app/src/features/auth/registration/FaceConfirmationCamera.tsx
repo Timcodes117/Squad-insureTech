@@ -85,7 +85,7 @@ export function FaceConfirmationCamera({ onComplete }: Props) {
     <View className="gap-4">
       <View className="flex-row items-start gap-3">
         <View className="mt-0.5 h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-100">
-          <UserRound size={24} color="#6D28D9" />
+          <UserRound size={24} color="#2563eb" />
         </View>
         <View className="flex-1 gap-1">
           <Text className="text-sm leading-relaxed text-neutral-600">Your picture is safe and only used to protect your account.</Text>
@@ -101,7 +101,7 @@ export function FaceConfirmationCamera({ onComplete }: Props) {
           ) : null}
           <Pressable
             onPress={() => void grant()}
-            className="items-center rounded-xl bg-violet-600 py-4 active:opacity-90"
+            className="items-center rounded-xl bg-brand-600 py-4 active:opacity-90"
             accessibilityRole="button"
             accessibilityLabel="Allow camera for face confirmation"
           >
@@ -153,7 +153,7 @@ export function FaceConfirmationCamera({ onComplete }: Props) {
         <Pressable
           onPress={() => void capture()}
           disabled={!cameraReady && !webUnavailable}
-          className={`items-center rounded-xl py-4 ${!cameraReady && !webUnavailable ? 'bg-neutral-200' : 'bg-violet-600 active:opacity-90'}`}
+          className={`items-center rounded-xl py-4 ${!cameraReady && !webUnavailable ? 'bg-neutral-200' : 'bg-brand-600 active:opacity-90'}`}
           accessibilityRole="button"
           accessibilityLabel="Take clear face picture"
         >

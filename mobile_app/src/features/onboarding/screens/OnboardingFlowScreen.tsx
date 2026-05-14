@@ -12,10 +12,9 @@ import { useHardwareBackHandler } from '@/features/auth/hooks/useHardwareBackHan
 import { OnboardingDecorBackground } from '@/features/onboarding/components/OnboardingDecorBackground';
 import { Text } from '@/shared/typography/Text';
 import { useOnboardingStore } from '@/store/onboardingStore';
-import { PauseIcon } from 'lucide-react-native';
-import { PlayIcon } from 'lucide-react-native';
+import { PauseIcon, PlayIcon } from 'lucide-react-native';
 
-const NEXT_PURPLE = '#6D28D9';
+const NEXT_ACCENT = '#2563eb';
 
 export default function OnboardingFlowScreen() {
   const router = useRouter();
@@ -164,7 +163,7 @@ export default function OnboardingFlowScreen() {
   }, []);
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-50" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
       <View pointerEvents="none" className="absolute inset-0">
         <OnboardingDecorBackground />
       </View>
@@ -178,7 +177,7 @@ export default function OnboardingFlowScreen() {
           {ONBOARDING_STEPS.map((s, i) => (
             <View key={s.id} className="h-[3px] flex-1 overflow-hidden rounded-full bg-neutral-200">
               <View
-                className="h-full rounded-full bg-violet-600"
+                className="h-full rounded-full bg-brand-600"
                 style={{ width: i <= index ? '100%' : '0%' }}
               />
             </View>
@@ -247,15 +246,15 @@ export default function OnboardingFlowScreen() {
                     accessibilityState={{ selected }}
                     onPress={() => void setPreferredLanguage(opt.id)}
                     className={`flex-row items-center gap-3 rounded-2xl border-[0.5px] px-4 py-3.5 active:opacity-90 ${
-                      selected ? 'border-violet-600 bg-violet-50' : 'border-neutral-200 '
+                      selected ? 'border-brand-600 bg-brand-50' : 'border-neutral-200 '
                     }`}
                   >
                     <View
                       className={`h-5 w-5 items-center justify-center rounded-full border-2 ${
-                        selected ? 'border-violet-600' : 'border-neutral-300'
+                        selected ? 'border-brand-600' : 'border-neutral-300'
                       }`}
                     >
-                      {selected ? <View className="h-2.5 w-2.5 rounded-full bg-violet-600" /> : null}
+                      {selected ? <View className="h-2.5 w-2.5 rounded-full bg-brand-600" /> : null}
                     </View>
                     <Text className="flex-1 text-base font-semibold text-neutral-900">{opt.label}</Text>
                   </Pressable>
@@ -293,7 +292,7 @@ export default function OnboardingFlowScreen() {
                   : 'h-14 w-14 items-center justify-center rounded-full active:opacity-90'
               }
               style={{
-                backgroundColor: NEXT_PURPLE,
+                backgroundColor: NEXT_ACCENT,
                 opacity: !canProceedLanguage ? 0.4 : 1,
               }}
             >
@@ -318,7 +317,7 @@ export default function OnboardingFlowScreen() {
             accessibilityLabel={audioPlaying ? 'Pause audio' : 'Play audio'}
             onPress={() => void toggleStepAudio()}
             className="h-14 w-14 items-center justify-center rounded-full shadow-md shadow-black/25 active:opacity-90"
-            style={{ backgroundColor: NEXT_PURPLE }}
+            style={{ backgroundColor: NEXT_ACCENT }}
           >
             <Text className="text-xl text-white">{audioPlaying ? <PauseIcon size={24} color="white" /> : <PlayIcon size={24} color="white" fill="white" />}</Text>
           </Pressable>
