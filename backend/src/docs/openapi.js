@@ -379,6 +379,7 @@ const schemas = {
           'preauth_code',
           'login_otp',
           'face_verified',
+          'password_reset',
           'system',
         ],
       },
@@ -396,6 +397,16 @@ const schemas = {
               sent: { type: 'boolean' },
               sentAt: { type: 'string', format: 'date-time', nullable: true },
               sid: { type: 'string', nullable: true },
+              error: { type: 'string', nullable: true },
+            },
+          },
+          email: {
+            type: 'object',
+            properties: {
+              sent: { type: 'boolean' },
+              sentAt: { type: 'string', format: 'date-time', nullable: true },
+              messageId: { type: 'string', nullable: true },
+              address: { type: 'string', nullable: true },
               error: { type: 'string', nullable: true },
             },
           },
@@ -607,6 +618,68 @@ const paths = {
           },
         },
         401: { $ref: '#/components/responses/Error401' },
+      },
+    },
+  },
+  '/auth/forgot-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Send a password reset code',
+      description:
+        'Issues a 6-digit reset code (15-minute expiry) and sends it via in-app notification + SMS + email. Response is always success — never confirms or denies whether the account exists, to prevent enumeration.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identifier'],
+              properties: { identifier: { type: 'string', example: '08099000010' } },
+            },
+            example: { identifier: '08099000010' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generic acknowledgement',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'If an account exists for that identifier, a reset code has been sent.',
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  '/auth/reset-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Reset password using the code from /forgot-password',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identifier', 'code', 'newPassword'],
+              properties: {
+                identifier: { type: 'string', example: '08099000010' },
+                code: { type: 'string', pattern: '^\\d{6}$', example: '123456' },
+                newPassword: { type: 'string', minLength: 8, example: 'NewStr0ngP@ss' },
+              },
+            },
+            example: { identifier: '08099000010', code: '123456', newPassword: 'NewStr0ngP@ss' },
+          },
+        },
+      },
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        400: { $ref: '#/components/responses/Error400' },
       },
     },
   },

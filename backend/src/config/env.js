@@ -30,6 +30,13 @@ const schema = Joi.object({
   TWILIO_AUTH_TOKEN: Joi.string().allow('').optional(),
   TWILIO_PHONE_NUMBER: Joi.string().allow('').optional(),
 
+  SMTP_HOST: Joi.string().allow('').optional(),
+  SMTP_PORT: Joi.number().integer().min(1).max(65535).default(587),
+  SMTP_SECURE: Joi.boolean().truthy('true').falsy('false').default(false),
+  SMTP_USER: Joi.string().allow('').optional(),
+  SMTP_PASS: Joi.string().allow('').optional(),
+  SMTP_FROM: Joi.string().allow('').optional(),
+
   API_BASE_URL: Joi.string().uri().default('http://localhost:4000'),
 }).unknown(true);
 
@@ -80,6 +87,15 @@ const config = Object.freeze({
     accountSid: value.TWILIO_ACCOUNT_SID || null,
     authToken: value.TWILIO_AUTH_TOKEN || null,
     phoneNumber: value.TWILIO_PHONE_NUMBER || null,
+  },
+
+  smtp: {
+    host: value.SMTP_HOST || null,
+    port: value.SMTP_PORT,
+    secure: value.SMTP_SECURE,
+    user: value.SMTP_USER || null,
+    pass: value.SMTP_PASS || null,
+    from: value.SMTP_FROM || null,
   },
 
   api: {

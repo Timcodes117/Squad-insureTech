@@ -140,6 +140,14 @@ const userSchema = new mongoose.Schema(
     loginOtpExpiresAt: {
       type: Date,
     },
+    // Password reset (forgot-password → reset-password two-step flow).
+    passwordResetCode: {
+      type: String,
+      select: false,
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+    },
     // Face verification token issued by /hospital/users/face-verify, single-use
     // and short-lived. Attached to a claim when submitted with this token.
     faceVerifiedToken: {

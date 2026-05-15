@@ -14,6 +14,7 @@ const { notifyUser } = require('../services/notification');
 const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 10);
 const otpGen = customAlphabet('0123456789', 6);
 const OTP_TTL_MS = 10 * 60 * 1000;
+const RESET_TTL_MS = 15 * 60 * 1000;
 
 function userQueryFromIdentifier(identifier) {
   return identifier.includes('@')
@@ -185,4 +186,72 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { register, login, requestLoginOtp, verifyLoginOtp, me };
+// Sends a 6-digit reset code via in-app notification + SMS + email.
+// Generic response intentionally — never confirms or denies whether the
+// account exists, so a caller can't enumerate users.
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { identifier } = req.body;
+  const user = await User.findOne(userQueryFromIdentifier(identifier));
+
+  if (user) {
+    const code = otpGen();
+    user.passwordResetCode = code;
+    user.passwordResetExpiresAt = new Date(Date.now() + RESET_TTL_MS);
+    await user.save();
+
+    await notifyUser(
+      user._id,
+      'password_reset',
+      'Password reset code',
+      `BetaHealth: your password reset code is ${code}. Expires in 15 minutes. If you didn't request this, ignore this message.`,
+      { expiresAt: user.passwordResetExpiresAt }
+    );
+  } else {
+    logger.info({ identifier }, 'forgotPassword: no user — generic response anyway');
+  }
+
+  res.json({
+    success: true,
+    message: 'If an account exists for that identifier, a reset code has been sent.',
+  });
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { identifier, code, newPassword } = req.body;
+
+  const user = await User.findOne(userQueryFromIdentifier(identifier)).select(
+    '+passwordHash +passwordResetCode'
+  );
+  if (!user) throw AppError.badRequest('Invalid reset code');
+
+  if (!user.passwordResetCode || !user.passwordResetExpiresAt) {
+    throw AppError.badRequest('No reset pending. Request a new code.');
+  }
+  if (new Date(user.passwordResetExpiresAt).getTime() < Date.now()) {
+    throw AppError.badRequest('Reset code expired. Request a new code.');
+  }
+  if (String(code) !== user.passwordResetCode) {
+    throw AppError.badRequest('Invalid reset code');
+  }
+
+  // The pre-save hook re-hashes when passwordHash is set to a non-bcrypt string.
+  user.passwordHash = newPassword;
+  user.passwordResetCode = undefined;
+  user.passwordResetExpiresAt = undefined;
+  // Invalidate any pending login OTP so they can't be used after a reset.
+  user.loginOtp = undefined;
+  user.loginOtpExpiresAt = undefined;
+  await user.save();
+
+  res.json({ success: true, message: 'Password reset successful. Log in with your new password.' });
+});
+
+module.exports = {
+  register,
+  login,
+  requestLoginOtp,
+  verifyLoginOtp,
+  forgotPassword,
+  resetPassword,
+  me,
+};

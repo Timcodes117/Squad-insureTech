@@ -15,6 +15,10 @@ router.post('/login', validateRequest({ body: v.loginBody }), c.login);
 router.post('/login/request-otp', validateRequest({ body: v.requestOtpBody }), c.requestLoginOtp);
 router.post('/login/verify-otp', validateRequest({ body: v.verifyOtpBody }), c.verifyLoginOtp);
 
+// Forgot/reset password.
+router.post('/forgot-password', validateRequest({ body: v.forgotPasswordBody }), c.forgotPassword);
+router.post('/reset-password', validateRequest({ body: v.resetPasswordBody }), c.resetPassword);
+
 router.get('/me', authRequired, c.me);
 
 module.exports = router;

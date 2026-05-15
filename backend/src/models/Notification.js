@@ -17,6 +17,7 @@ const TYPES = [
   'preauth_code',
   'login_otp',
   'face_verified',
+  'password_reset',
   'system',
 ];
 
@@ -39,6 +40,13 @@ const notificationSchema = new mongoose.Schema(
         sent: { type: Boolean, default: false },
         sentAt: { type: Date },
         sid: { type: String },
+        error: { type: String },
+      },
+      email: {
+        sent: { type: Boolean, default: false },
+        sentAt: { type: Date },
+        messageId: { type: String },
+        address: { type: String },
         error: { type: String },
       },
       inApp: {

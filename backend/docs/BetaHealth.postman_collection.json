@@ -18,7 +18,8 @@
     { "key": "preAuthCode", "value": "" },
     { "key": "faceToken", "value": "" },
     { "key": "otpCode", "value": "" },
-    { "key": "membershipNumber", "value": "" }
+    { "key": "membershipNumber", "value": "" },
+    { "key": "resetCode", "value": "" }
   ],
   "item": [
     {
@@ -120,6 +121,40 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "login", "verify-otp"]
             }
+          }
+        },
+        {
+          "name": "POST /auth/forgot-password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Sends a 6-digit reset code (15-min expiry) via in-app + SMS + email. Response is generic — never reveals whether the account exists."
+          }
+        },
+        {
+          "name": "POST /auth/reset-password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\",\n  \"code\": \"{{resetCode}}\",\n  \"newPassword\": \"NewStr0ngP@ss\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Set {{resetCode}} from the code that arrived in SMS/email/notification feed, then run."
           }
         },
         {
