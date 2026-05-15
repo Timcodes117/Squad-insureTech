@@ -9,6 +9,9 @@ const Hospital = require('../models/Hospital');
 const PoolWallet = require('../models/PoolWallet');
 const squad = require('../services/squad');
 const { sendSMS } = require('../services/sms');
+const { runPremiumBurn } = require('../jobs/premiumBurn');
+const { runCoverageReset } = require('../jobs/coverageReset');
+const { runHospitalAnomalyScan } = require('../jobs/hospitalAnomalyScan');
 
 // POST /api/v1/admin/claims/:id/approve
 // Force-approve a flagged claim and run the payout.
@@ -46,7 +49,7 @@ const approveFlaggedClaim = asyncHandler(async (req, res) => {
     bankCode: hospital.bankCode,
     accountNumber: hospital.accountNumber,
     accountName: hospital.accountName,
-    remark: `MyBodyCover admin-approved claim ${claim._id}`,
+    remark: `BetaHealth admin-approved claim ${claim._id}`,
   });
 
   if (!transfer.success || transfer.status === 'failed') {
@@ -98,7 +101,7 @@ const approveFlaggedClaim = asyncHandler(async (req, res) => {
   try {
     await sendSMS(
       user.phone,
-      `MyBodyCover paid ₦${(amountCovered / 100).toLocaleString()} for your bill at ${hospital.name}. Coverage remaining: ₦${(user.coverageRemaining / 100).toLocaleString()}.`
+      `BetaHealth paid ₦${(amountCovered / 100).toLocaleString()} for your bill at ${hospital.name}. Coverage remaining: ₦${(user.coverageRemaining / 100).toLocaleString()}.`
     );
   } catch (err) {
     logger.warn({ err }, 'admin.approveFlaggedClaim: SMS failed');
@@ -111,4 +114,41 @@ const approveFlaggedClaim = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { approveFlaggedClaim };
+// POST /api/v1/admin/jobs/run-premium-burn
+// Optional body: { userId } to scope to a single user (cleaner demo).
+const triggerPremiumBurn = asyncHandler(async (req, res) => {
+  const summary = await runPremiumBurn({ userId: req.body?.userId });
+  res.json({ success: true, data: summary });
+});
+
+// POST /api/v1/admin/jobs/run-coverage-reset
+const triggerCoverageReset = asyncHandler(async (req, res) => {
+  const summary = await runCoverageReset({ userId: req.body?.userId });
+  res.json({ success: true, data: summary });
+});
+
+// POST /api/v1/admin/jobs/run-hospital-anomaly-scan
+const triggerHospitalAnomalyScan = asyncHandler(async (req, res) => {
+  const summary = await runHospitalAnomalyScan({ hospitalId: req.body?.hospitalId });
+  res.json({ success: true, data: summary });
+});
+
+// POST /api/v1/admin/hospitals/:id/clear-flag
+const clearHospitalFlag = asyncHandler(async (req, res) => {
+  const hospital = await Hospital.findById(req.params.id);
+  if (!hospital) throw AppError.notFound('Hospital not found');
+  hospital.flagged = false;
+  hospital.flaggedAt = undefined;
+  hospital.flagReason = undefined;
+  await hospital.save();
+  logger.info({ hospitalId: hospital.id }, 'admin: hospital flag cleared');
+  res.json({ success: true, data: { hospital: hospital.toJSON() } });
+});
+
+module.exports = {
+  approveFlaggedClaim,
+  triggerPremiumBurn,
+  triggerCoverageReset,
+  triggerHospitalAnomalyScan,
+  clearHospitalFlag,
+};

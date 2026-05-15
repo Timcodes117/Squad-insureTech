@@ -4,6 +4,7 @@ const config = require('./config/env');
 const logger = require('./config/logger');
 const { connect, disconnect } = require('./config/db');
 const { closeRedis } = require('./config/redis');
+const scheduler = require('./jobs/scheduler');
 const app = require('./app');
 
 let server;
@@ -12,6 +13,13 @@ let shuttingDown = false;
 async function start() {
   try {
     await connect();
+    // Scheduler must NEVER block boot: if Redis is missing or unreachable, log a
+    // warning and continue. The HTTP API + admin manual triggers still work.
+    try {
+      await scheduler.start();
+    } catch (err) {
+      logger.warn({ err }, 'startup: scheduler failed to start — API will continue without cron jobs');
+    }
     server = app.listen(config.port, () => {
       logger.info(
         { port: config.port, env: config.env, baseUrl: config.api.baseUrl },
@@ -39,6 +47,7 @@ async function shutdown(signal) {
       await new Promise((resolve) => server.close(resolve));
       logger.info('http: server closed');
     }
+    await scheduler.stop();
     await closeRedis();
     await disconnect();
     clearTimeout(forceExitTimer);

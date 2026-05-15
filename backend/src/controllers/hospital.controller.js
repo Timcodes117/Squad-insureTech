@@ -61,7 +61,7 @@ const lookupUser = asyncHandler(async (req, res) => {
   const { phone } = req.query;
 
   const user = await User.findOne({ phone });
-  if (!user) throw AppError.notFound('No MyBodyCover user with that phone');
+  if (!user) throw AppError.notFound('No BetaHealth user with that phone');
 
   // Issue a short-lived pre-auth code the user must present to authorise a claim.
   const code = preAuthCodeGen();
@@ -111,7 +111,7 @@ const submitClaim = asyncHandler(async (req, res) => {
   const hospital = req.hospital;
 
   const user = await User.findOne({ phone });
-  if (!user) throw AppError.notFound('No MyBodyCover user with that phone');
+  if (!user) throw AppError.notFound('No BetaHealth user with that phone');
 
   // Pre-auth gate (phishing/abuse resistance — a hospital can't submit a claim
   // without proof the user was physically present and consented).

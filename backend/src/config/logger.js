@@ -5,7 +5,7 @@ const config = require('./env');
 
 const logger = pino({
   level: process.env.LOG_LEVEL || (config.isProd ? 'info' : 'debug'),
-  base: { service: 'mybodycover-api', env: config.env },
+  base: { service: 'betahealth-api', env: config.env },
   redact: {
     paths: [
       'req.headers.authorization',

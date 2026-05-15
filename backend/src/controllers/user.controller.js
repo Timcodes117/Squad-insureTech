@@ -6,6 +6,21 @@ const AppError = require('../utils/AppError');
 const Wallet = require('../models/Wallet');
 const Claim = require('../models/Claim');
 const squad = require('../services/squad');
+const { sendSMS } = require('../services/sms');
+
+const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
+
+// Reserved = the user's weeklyPremium if they have NOT yet burned this week.
+// This stops a user from withdrawing money that's about to be owed for the
+// currently-active week.
+function computeReserved(user) {
+  const premium = user.weeklyPremium || 0;
+  if (!premium) return 0;
+  if (!user.lastPremiumBurnAt) return premium;
+  const lastBurnTs = new Date(user.lastPremiumBurnAt).getTime();
+  if (Date.now() - lastBurnTs >= SIX_DAYS_MS) return premium;
+  return 0;
+}
 
 // GET /api/v1/users/me/wallet
 const getWallet = asyncHandler(async (req, res) => {
@@ -29,6 +44,8 @@ const getWallet = asyncHandler(async (req, res) => {
 });
 
 // GET /api/v1/users/me/transactions
+// Returns ledger entries newest-first, projected to the shape the frontend wants:
+// { type, amount, category, description, balanceAfter, reference, createdAt }
 const listTransactions = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
 
@@ -40,7 +57,15 @@ const listTransactions = asyncHandler(async (req, res) => {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const total = sorted.length;
   const start = (page - 1) * limit;
-  const items = sorted.slice(start, start + limit);
+  const items = sorted.slice(start, start + limit).map((e) => ({
+    type: e.type,
+    amount: e.amount,
+    category: e.category,
+    description: e.description,
+    balanceAfter: e.balanceAfter,
+    reference: e.reference,
+    createdAt: e.createdAt,
+  }));
 
   res.json({
     success: true,
@@ -126,9 +151,127 @@ const retryVirtualAccount = asyncHandler(async (req, res) => {
   });
 });
 
+// GET /api/v1/users/me/withdrawable
+const getWithdrawable = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const wallet = await Wallet.findOne({ userId: user._id }).select('balance').lean();
+  const walletBalance = wallet?.balance ?? 0;
+  const reserved = computeReserved(user);
+  const withdrawableAmount = Math.max(0, walletBalance - reserved);
+
+  res.json({
+    success: true,
+    data: {
+      walletBalance,
+      reserved,
+      withdrawableAmount,
+      reason: reserved > 0
+        ? `₦${(reserved / 100).toLocaleString()} reserved for this week's premium`
+        : null,
+    },
+  });
+});
+
+// POST /api/v1/users/me/withdraw
+// Atomic-ish flow with explicit reversal: if Squad transfer fails after the
+// wallet debit, immediately credit the user back so money never sits in limbo.
+const withdraw = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { amount, bankCode, accountNumber } = req.body;
+
+  const wallet = await Wallet.findOne({ userId: user._id }).select('balance');
+  if (!wallet) throw AppError.notFound('Wallet not found');
+
+  const reserved = computeReserved(user);
+  const withdrawableAmount = Math.max(0, wallet.balance - reserved);
+
+  if (amount > withdrawableAmount) {
+    throw AppError.badRequest(
+      `Requested ₦${(amount / 100).toLocaleString()} exceeds the maximum withdrawable of ₦${(withdrawableAmount / 100).toLocaleString()}.${reserved > 0 ? ` ₦${(reserved / 100).toLocaleString()} is reserved for this week's premium.` : ''}`,
+      { details: { walletBalance: wallet.balance, reserved, withdrawableAmount, requested: amount } }
+    );
+  }
+
+  // Verify destination account.
+  const lookup = await squad.lookupAccount(bankCode, accountNumber);
+  if (!lookup.success || !lookup.accountName) {
+    throw AppError.badRequest(
+      lookup.error || 'Could not verify destination bank account. Check bank code + account number.'
+    );
+  }
+  const accountName = lookup.accountName;
+
+  // Debit first (atomic). If this throws, we never charged Squad.
+  const debitRef = `WD_${user.id}_${Date.now()}`;
+  await Wallet.debit({
+    userId: user._id,
+    amount,
+    category: 'withdrawal',
+    reference: debitRef,
+    description: `Withdrawal to ${accountName}`,
+  });
+
+  // Initiate transfer.
+  const transfer = await squad.initiateTransfer({
+    amount,
+    bankCode,
+    accountNumber,
+    accountName,
+    remark: 'BetaHealth withdrawal',
+  });
+
+  if (!transfer.success || transfer.status === 'failed') {
+    // REVERSE the debit immediately — never leave the user's money in limbo.
+    try {
+      await Wallet.credit({
+        userId: user._id,
+        amount,
+        category: 'reversal',
+        reference: `${debitRef}_REVERSED`,
+        description: `Withdrawal failed - reversed (${transfer.error || transfer.status || 'unknown error'})`,
+      });
+    } catch (err) {
+      logger.error(
+        { err, userId: user.id, debitRef, transfer },
+        'withdraw: CRITICAL — reversal failed; manual reconciliation required'
+      );
+    }
+    return res.status(502).json({
+      success: false,
+      error: transfer.error || 'Transfer failed to initiate. Your wallet has been refunded.',
+      data: { reference: transfer.reference, status: transfer.status },
+    });
+  }
+
+  // Best-effort SMS — never breaks the flow.
+  try {
+    await sendSMS(
+      user.phone,
+      `BetaHealth: ₦${(amount / 100).toLocaleString()} withdrawn to your ${accountName} account.`
+    );
+  } catch (err) {
+    logger.warn({ err }, 'withdraw: sms failed (swallowed)');
+  }
+
+  res.json({
+    success: true,
+    message: 'Withdrawal initiated',
+    data: {
+      amount,
+      accountName,
+      bankCode,
+      accountNumber,
+      reference: transfer.reference,
+      status: transfer.status,
+    },
+  });
+});
+
 module.exports = {
   getWallet,
   listTransactions,
   listClaims,
   retryVirtualAccount,
+  getWithdrawable,
+  withdraw,
 };

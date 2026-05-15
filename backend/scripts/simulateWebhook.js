@@ -60,7 +60,7 @@ const payload = {
     transaction_date: new Date().toISOString(),
     customer_identifier: null,
     sender_name: 'JOHN PAYER',
-    remarks: 'MyBodyCover funding test',
+    remarks: 'BetaHealth funding test',
     channel: 'transfer',
   },
 };

@@ -5,7 +5,7 @@ const AppError = require('../utils/AppError');
 
 // All monetary values are in KOBO (₦1 = 100 kobo).
 
-const LEDGER_CATEGORIES = ['funding', 'premium_burn', 'claim_settlement', 'reversal'];
+const LEDGER_CATEGORIES = ['funding', 'premium_burn', 'claim_settlement', 'withdrawal', 'reversal'];
 
 const ledgerEntrySchema = new mongoose.Schema(
   {

@@ -11,7 +11,7 @@ router.get('/', (_req, res) => {
     success: true,
     data: {
       status: 'ok',
-      service: 'mybodycover-api',
+      service: 'betahealth-api',
       uptimeSeconds: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
       db: dbStates[mongoose.connection.readyState] || 'unknown',
