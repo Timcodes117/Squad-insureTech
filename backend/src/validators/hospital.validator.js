@@ -9,7 +9,6 @@ const registerBody = Joi.object({
   contactPhone: Joi.string().pattern(NIGERIAN_PHONE_REGEX).optional(),
   email: Joi.string().email().lowercase().trim().optional(),
   address: Joi.string().max(255).trim().optional().allow(''),
-  // Squad expects a 6-character NIP code (e.g. 000013 for GTBank).
   bankCode: Joi.string().length(6).pattern(/^\d+$/).required().messages({
     'string.length': 'bankCode must be a 6-digit Squad NIP code (e.g. 000013 for GTBank)',
   }),
@@ -22,7 +21,7 @@ const userLookupQuery = Joi.object({
 
 const submitClaimBody = Joi.object({
   phone: Joi.string().pattern(NIGERIAN_PHONE_REGEX).required(),
-  amount: Joi.number().integer().min(1).required(), // KOBO
+  amount: Joi.number().integer().min(1).required(),
   treatmentType: Joi.string().min(2).max(80).trim().required(),
   clinicalNote: Joi.string().max(2000).trim().optional().allow(''),
   preAuthCode: Joi.string().min(4).max(20).required(),

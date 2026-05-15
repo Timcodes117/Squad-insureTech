@@ -1,12 +1,13 @@
 {
-  "name": "mybodycover-backend",
-  "version": "0.1.0",
+  "name": "betahealth-backend",
+  "version": "1.0.0",
   "private": true,
   "description": "BetaHealth — micro-HMO insurance backend for Nigeria's informal sector. Powered by Squad.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "seed:demo": "node scripts/seedDemo.js"
   },
   "engines": {
     "node": ">=20"

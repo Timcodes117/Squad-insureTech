@@ -1,7 +1,6 @@
 'use strict';
 
 const { customAlphabet } = require('nanoid');
-const logger = require('../config/logger');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const Hospital = require('../models/Hospital');
@@ -10,14 +9,13 @@ const Claim = require('../models/Claim');
 const PoolWallet = require('../models/PoolWallet');
 const squad = require('../services/squad');
 const { auditClaim } = require('../services/claimAuditor');
-const { sendSMS } = require('../services/sms');
+const { notifyUser } = require('../services/notification');
 
 const preAuthCodeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
-const PRE_AUTH_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const PRE_AUTH_TTL_MS = 4 * 60 * 60 * 1000;
 
-// POST /api/v1/hospital/register
-// PROD NOTE: open registration is a hackathon shortcut. In production, gate this
-// behind admin approval + KYB document upload.
+// Open registration is a hackathon shortcut. Production should gate this behind
+// admin approval + KYB document upload.
 const registerHospital = asyncHandler(async (req, res) => {
   const { name, contactPhone, email, address, bankCode, accountNumber } = req.body;
 
@@ -26,7 +24,6 @@ const registerHospital = asyncHandler(async (req, res) => {
     if (dup) throw AppError.conflict('A hospital with this email already exists');
   }
 
-  // Verify the bank account with Squad before creating the hospital.
   const lookup = await squad.lookupAccount(bankCode, accountNumber);
 
   const hospital = new Hospital({
@@ -56,31 +53,27 @@ const registerHospital = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/v1/hospital/users/lookup?phone=...
 const lookupUser = asyncHandler(async (req, res) => {
   const { phone } = req.query;
 
   const user = await User.findOne({ phone });
   if (!user) throw AppError.notFound('No BetaHealth user with that phone');
 
-  // Issue a short-lived pre-auth code the user must present to authorise a claim.
+  // The pre-auth code is the phishing-resistance gate: the user reads it aloud
+  // and the hospital must include it when submitting the claim. Without this a
+  // hospital with the patient's phone number alone could fabricate claims.
   const code = preAuthCodeGen();
   user.preAuthCode = code;
   user.preAuthExpiresAt = new Date(Date.now() + PRE_AUTH_TTL_MS);
   await user.save();
 
-  // SECURITY NOTE: in production we'd ALSO send this code to the user's phone via SMS,
-  // and require the hospital to type the code the user reads aloud. That's what
-  // makes the preAuthCode the phishing-resistance point — the hospital can't
-  // submit a claim without proof the user is physically present.
-  try {
-    await sendSMS(
-      user.phone,
-      `BetaHealth: Your hospital pre-auth code is ${code}. Share ONLY with the hospital staff treating you. Expires in 4 hours.`
-    );
-  } catch (err) {
-    logger.warn({ err }, 'lookupUser: SMS failed (swallowed)');
-  }
+  await notifyUser(
+    user._id,
+    'preauth_code',
+    'Hospital pre-auth code',
+    `BetaHealth: Your hospital pre-auth code is ${code}. Share ONLY with the hospital staff treating you. Expires in 4 hours.`,
+    { code, expiresAt: user.preAuthExpiresAt }
+  );
 
   res.json({
     success: true,
@@ -105,7 +98,6 @@ function isPreAuthValid(user, providedCode) {
   return true;
 }
 
-// POST /api/v1/hospital/claims  — THE big one.
 const submitClaim = asyncHandler(async (req, res) => {
   const { phone, amount, treatmentType, clinicalNote, preAuthCode } = req.body;
   const hospital = req.hospital;
@@ -113,13 +105,10 @@ const submitClaim = asyncHandler(async (req, res) => {
   const user = await User.findOne({ phone });
   if (!user) throw AppError.notFound('No BetaHealth user with that phone');
 
-  // Pre-auth gate (phishing/abuse resistance — a hospital can't submit a claim
-  // without proof the user was physically present and consented).
   if (!isPreAuthValid(user, preAuthCode)) {
     throw AppError.unauthorized('preAuthCode invalid or expired — request a fresh one from the patient');
   }
 
-  // Pull recent claims for duplicate detection.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const recentClaims = await Claim.find({
     userId: user._id,
@@ -135,7 +124,6 @@ const submitClaim = asyncHandler(async (req, res) => {
     recentClaims,
   });
 
-  // Persist the claim with the auditor verdict baked in.
   const claim = new Claim({
     userId: user._id,
     hospitalId: hospital._id,
@@ -150,6 +138,13 @@ const submitClaim = asyncHandler(async (req, res) => {
     claim.status = 'rejected';
     claim.rejectionReason = audit.checks.notes;
     await claim.save();
+    await notifyUser(
+      user._id,
+      'claim_rejected',
+      'Claim rejected',
+      `BetaHealth: your claim at ${hospital.name} was rejected. ${audit.checks.notes}`,
+      { claimId: claim.id, reason: audit.checks.notes }
+    );
     return res.status(200).json({
       success: true,
       message: 'Claim rejected by auditor',
@@ -160,6 +155,13 @@ const submitClaim = asyncHandler(async (req, res) => {
   if (audit.decision === 'flagged') {
     claim.status = 'flagged';
     await claim.save();
+    await notifyUser(
+      user._id,
+      'claim_flagged',
+      'Claim under review',
+      `BetaHealth: your claim at ${hospital.name} is under review. We'll update you shortly.`,
+      { claimId: claim.id }
+    );
     return res.status(200).json({
       success: true,
       message: 'Claim flagged for manual review — admin must approve before payout',
@@ -167,19 +169,23 @@ const submitClaim = asyncHandler(async (req, res) => {
     });
   }
 
-  // Approved path → settlement.
-  // Use the auditor's effectiveLimit so the week-1 cap is honoured.
+  // Honour the auditor's effectiveLimit so the week-1 cap caps amountCovered.
   const effectiveLimit = audit.effectiveLimit ?? user.coverageRemaining;
   const amountCovered = Math.min(amount, effectiveLimit);
   const amountGap = amount - amountCovered;
 
-  // Ensure pool float can cover the payout.
   const pool = await PoolWallet.getOrCreate();
   if (pool.balance < amountCovered) {
-    // In production the HMO operator tops up the float; for hackathon we just flag.
     claim.status = 'flagged';
     claim.rejectionReason = 'Insufficient pool float — HMO must top up';
     await claim.save();
+    await notifyUser(
+      user._id,
+      'claim_flagged',
+      'Claim under review',
+      `BetaHealth: your claim at ${hospital.name} is under review. We'll update you shortly.`,
+      { claimId: claim.id, reason: 'pool float' }
+    );
     return res.status(200).json({
       success: true,
       message: 'Claim approved by auditor but pool float is too low — flagged for ops',
@@ -187,7 +193,6 @@ const submitClaim = asyncHandler(async (req, res) => {
     });
   }
 
-  // Initiate Squad transfer.
   const transfer = await squad.initiateTransfer({
     amount: amountCovered,
     bankCode: hospital.bankCode,
@@ -197,8 +202,8 @@ const submitClaim = asyncHandler(async (req, res) => {
   });
 
   if (!transfer.success || transfer.status === 'failed') {
-    // TODO(reconciliation-job): a background worker should requery and finalise
-    // claims left in "approved" with a stale Squad reference.
+    // Claim stays at "approved" with a stale reference. A reconciliation worker
+    // will requery and either flip to "paid" or roll the audit back.
     claim.status = 'approved';
     claim.amountCovered = amountCovered;
     claim.amountGap = amountGap;
@@ -220,9 +225,8 @@ const submitClaim = asyncHandler(async (req, res) => {
     });
   }
 
-  // Treat any non-failed status as in-flight or done — but we only debit the pool
-  // / decrement coverage on a clear success. Squad's sandbox commonly returns
-  // "success" or "processing"; we treat both as "money committed" for v0.
+  // We only debit the pool and decrement coverage on a clear success. Squad's
+  // sandbox returns "success" or "processing"; both are treated as committed.
   const successStates = new Set(['success', 'successful', 'processing', 'pending']);
   if (!successStates.has(transfer.status)) {
     claim.status = 'approved';
@@ -238,7 +242,6 @@ const submitClaim = asyncHandler(async (req, res) => {
     });
   }
 
-  // Commit money movements.
   await PoolWallet.debitPool({
     amount: amountCovered,
     category: 'claim_settlement',
@@ -246,7 +249,7 @@ const submitClaim = asyncHandler(async (req, res) => {
     description: `Claim ${claim._id} payout to ${hospital.name}`,
   });
   user.coverageRemaining = Math.max(0, user.coverageRemaining - amountCovered);
-  // Invalidate the pre-auth code so it can't be reused.
+  // Single-use pre-auth: clear so the same code can't authorise another claim.
   user.preAuthCode = undefined;
   user.preAuthExpiresAt = undefined;
   await user.save();
@@ -259,18 +262,19 @@ const submitClaim = asyncHandler(async (req, res) => {
   claim.paidAt = new Date();
   await claim.save();
 
-  // Fire-and-forget user SMS.
-  try {
-    const paidNaira = (amountCovered / 100).toLocaleString();
-    const remainNaira = (user.coverageRemaining / 100).toLocaleString();
-    let msg = `BetaHealth paid ₦${paidNaira} of your bill at ${hospital.name}. Coverage remaining: ₦${remainNaira}.`;
-    if (amountGap > 0) {
-      msg += ` Please pay ₦${(amountGap / 100).toLocaleString()} balance to the hospital.`;
-    }
-    await sendSMS(user.phone, msg);
-  } catch (err) {
-    logger.warn({ err }, 'submitClaim: sms failed (swallowed)');
+  const paidNaira = (amountCovered / 100).toLocaleString();
+  const remainNaira = (user.coverageRemaining / 100).toLocaleString();
+  let msg = `BetaHealth paid ₦${paidNaira} of your bill at ${hospital.name}. Coverage remaining: ₦${remainNaira}.`;
+  if (amountGap > 0) {
+    msg += ` Please pay ₦${(amountGap / 100).toLocaleString()} balance to the hospital.`;
   }
+  await notifyUser(user._id, 'claim_approved', 'Claim paid', msg, {
+    claimId: claim.id,
+    amountCovered,
+    amountGap,
+    coverageRemaining: user.coverageRemaining,
+    hospitalName: hospital.name,
+  });
 
   return res.status(200).json({
     success: true,
@@ -290,7 +294,6 @@ const submitClaim = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/v1/hospital/claims
 const listClaims = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
   const skip = (page - 1) * limit;

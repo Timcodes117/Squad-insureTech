@@ -5,17 +5,12 @@ const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const PoolWallet = require('../models/PoolWallet');
 const { splitPremium } = require('../services/feeSplit');
-const { sendSMS } = require('../services/sms');
+const { notifyUser } = require('../services/notification');
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
 
-// Runs the weekly premium burn. Idempotent-safe: a user whose lastPremiumBurnAt
-// is within the last 6 days is skipped, so re-running on the same day (or twice
-// the same week) won't double-burn.
-//
-// Options:
-//   { userId } — burn for a single user only (used by the demo trigger).
-//   { dryRun } — compute without writing.
+// Weekly premium burn. Idempotency: any user burned within the last 6 days is
+// skipped, so re-runs on the same day don't double-charge.
 async function runPremiumBurn(opts = {}) {
   const { userId, dryRun = false } = opts;
   const sixDaysAgo = new Date(Date.now() - SIX_DAYS_MS);
@@ -39,7 +34,6 @@ async function runPremiumBurn(opts = {}) {
   };
 
   for (const user of users) {
-    // Per-user idempotency guard (covers the single-user manual path too).
     if (user.lastPremiumBurnAt && new Date(user.lastPremiumBurnAt) > sixDaysAgo) {
       summary.skipped += 1;
       summary.perUser.push({ userId: user.id, status: 'skipped', reason: 'burned within last 6 days' });
@@ -60,14 +54,20 @@ async function runPremiumBurn(opts = {}) {
       if (!dryRun) {
         user.isActive = false;
         await user.save();
-        try {
-          await sendSMS(
-            user.phone,
-            `BetaHealth: Your cover is paused — wallet balance too low. Top up ₦${(premium / 100).toLocaleString()} to reactivate.`
-          );
-        } catch (err) {
-          logger.warn({ err, userId: user.id }, 'premiumBurn: paused SMS failed');
-        }
+        await notifyUser(
+          user._id,
+          'cover_paused',
+          'Cover paused',
+          `BetaHealth: Your cover is paused — wallet balance too low. Top up ₦${(premium / 100).toLocaleString()} to reactivate.`,
+          { balance, premium }
+        );
+        await notifyUser(
+          user._id,
+          'low_balance',
+          'Low balance',
+          `BetaHealth: Your wallet (₦${(balance / 100).toLocaleString()}) is below this week's premium of ₦${(premium / 100).toLocaleString()}.`,
+          { balance, premium }
+        );
       }
       summary.paused += 1;
       summary.perUser.push({ userId: user.id, status: 'paused', balance, premium });
@@ -80,7 +80,6 @@ async function runPremiumBurn(opts = {}) {
       continue;
     }
 
-    // Atomic debit.
     const reference = `BURN_${user.id}_${Date.now()}`;
     let updatedWallet;
     try {
@@ -99,7 +98,6 @@ async function runPremiumBurn(opts = {}) {
       continue;
     }
 
-    // Split 90/10 to pool + platform.
     const split = splitPremium(premium);
     if (split.pool > 0) {
       await PoolWallet.creditPool({
@@ -117,11 +115,10 @@ async function runPremiumBurn(opts = {}) {
       });
     }
 
-    // Mark first-burn + last-burn timestamps.
     const now = new Date();
     if (!user.firstPremiumAt) user.firstPremiumAt = now;
     user.lastPremiumBurnAt = now;
-    if (!user.isActive) user.isActive = true; // safety; should already be true
+    if (!user.isActive) user.isActive = true;
     await user.save();
 
     summary.burned += 1;
@@ -136,14 +133,19 @@ async function runPremiumBurn(opts = {}) {
       newBalance: updatedWallet.balance,
     });
 
-    try {
-      await sendSMS(
-        user.phone,
-        `BetaHealth: ₦${(premium / 100).toLocaleString()} weekly premium paid. Wallet balance: ₦${(updatedWallet.balance / 100).toLocaleString()}. You're covered.`
-      );
-    } catch (err) {
-      logger.warn({ err, userId: user.id }, 'premiumBurn: success SMS failed');
-    }
+    await notifyUser(
+      user._id,
+      'premium_burned',
+      'Weekly premium paid',
+      `BetaHealth: ₦${(premium / 100).toLocaleString()} weekly premium paid. Wallet balance: ₦${(updatedWallet.balance / 100).toLocaleString()}. You're covered.`,
+      {
+        premium,
+        balance: updatedWallet.balance,
+        poolShare: split.pool,
+        platformShare: split.platform,
+        reference,
+      }
+    );
   }
 
   logger.info(

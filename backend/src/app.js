@@ -18,31 +18,25 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
-// Swagger UI needs inline scripts/styles; relax CSP just for /api/docs.
-app.use(
-  '/api/docs',
-  helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }),
-  swaggerUi.serve,
-  swaggerUi.setup(openapiSpec, {
-    customSiteTitle: 'BetaHealth API Docs',
-    swaggerOptions: { persistAuthorization: true },
-  })
-);
+// Swagger UI uses inline scripts/styles; helmet's default CSP would block them.
+const docsHelmet = helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false });
+const docsUi = swaggerUi.setup(openapiSpec, {
+  customSiteTitle: 'BetaHealth API Docs',
+  swaggerOptions: { persistAuthorization: true },
+});
+app.use('/api/v1/docs', docsHelmet, swaggerUi.serve, docsUi);
+app.get('/api/v1/docs.json', (_req, res) => res.json(openapiSpec));
+app.use('/api/docs', docsHelmet, swaggerUi.serve, docsUi);
 app.get('/api/docs.json', (_req, res) => res.json(openapiSpec));
 
 app.use(helmet());
-app.use(
-  cors({
-    origin: config.isProd ? true : true, // allow all in dev; tighten in prod via config later
-    credentials: true,
-  })
-);
+app.use(cors({ origin: true, credentials: true }));
 
 app.use(
   express.json({
     limit: '1mb',
+    // Capture rawBody so the Squad webhook controller can HMAC-verify it.
     verify: (req, _res, buf) => {
-      // Stash raw body for webhook signature verification.
       req.rawBody = buf;
     },
   })
@@ -67,7 +61,7 @@ app.use(
 app.get('/', (_req, res) => {
   res.json({
     success: true,
-    data: { service: 'betahealth-api', version: '0.1.0', docs: '/api/v1/health' },
+    data: { service: 'betahealth-api', version: '1.0.0', docs: '/api/v1/docs' },
   });
 });
 

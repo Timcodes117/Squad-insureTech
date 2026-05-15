@@ -13,8 +13,8 @@ let shuttingDown = false;
 async function start() {
   try {
     await connect();
-    // Scheduler must NEVER block boot: if Redis is missing or unreachable, log a
-    // warning and continue. The HTTP API + admin manual triggers still work.
+    // Scheduler must never block boot — if Redis is down the HTTP API and admin
+    // manual triggers still work; only the recurring cron jobs are unavailable.
     try {
       await scheduler.start();
     } catch (err) {

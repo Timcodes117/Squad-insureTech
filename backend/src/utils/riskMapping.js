@@ -26,8 +26,7 @@ const MEDIUM_KEYWORDS = [
   'farmer',
 ];
 
-// Weekly premium amounts in KOBO (₦1 = 100 kobo).
-// ₦500 / ₦750 / ₦1000 per week → 50_000 / 75_000 / 100_000 kobo.
+// Weekly premium per tier, in kobo: ₦500 / ₦750 / ₦1000.
 const PREMIUM_BY_TIER = Object.freeze({
   low: 50_000,
   medium: 75_000,

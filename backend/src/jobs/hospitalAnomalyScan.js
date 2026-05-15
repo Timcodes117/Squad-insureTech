@@ -7,8 +7,8 @@ const Claim = require('../models/Claim');
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCAN_STATUSES = ['approved', 'paid'];
 
-// Surfaces hospitals whose last-24h activity is more than 3x their 7-day daily
-// average (claim count OR payout sum). DOES NOT block any payments — only flags.
+// Flags (but does not block) hospitals whose last-24h activity exceeds 3x their
+// 7-day daily average on either claim count or payout sum.
 async function runHospitalAnomalyScan(opts = {}) {
   const { hospitalId } = opts;
   const now = Date.now();
@@ -20,7 +20,8 @@ async function runHospitalAnomalyScan(opts = {}) {
   const summary = { scanned: hospitals.length, flagged: 0, skipped: 0, perHospital: [] };
 
   for (const h of hospitals) {
-    // Skip hospitals with very little history — would false-positive.
+    // Hospitals younger than 3 days don't have enough history — comparing 24h
+    // against a near-empty 7-day window would flag every legitimate new clinic.
     const ageDays = (now - new Date(h.createdAt).getTime()) / DAY_MS;
     if (ageDays < 3) {
       summary.skipped += 1;

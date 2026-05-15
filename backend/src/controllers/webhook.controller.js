@@ -4,10 +4,10 @@ const logger = require('../config/logger');
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const { verifyWebhookSignature } = require('../services/squad');
-const { sendSMS } = require('../services/sms');
+const { notifyUser } = require('../services/notification');
 const asyncHandler = require('../utils/asyncHandler');
 
-// Squad sends amounts in NAIRA. Internally we store kobo. Convert at the boundary.
+// Squad webhooks carry NAIRA; the rest of the system uses kobo.
 function parseAmountToKobo(raw) {
   if (raw === undefined || raw === null) return null;
   const n = Number(raw);
@@ -73,15 +73,14 @@ const handleSquadWebhook = asyncHandler(async (req, res) => {
     return res.status(200).json({ success: true, ignored: true, reason: 'user not found' });
   }
 
-  // Idempotency: Squad retries on transient errors. Same reference => no-op.
+  // Squad retries on transient errors; dedupe by transaction_reference.
   if (await Wallet.hasReference(user._id, event.transactionReference)) {
     return res.status(200).json({ success: true, duplicate: true });
   }
 
-  // FUNDING = FULL USER CREDIT. NO SPLIT. NO POOL/PLATFORM CREDIT.
-  // The 90/10 split happens on the weekly PREMIUM BURN, not on funding —
-  // because users can pre-fund many weeks ahead and that money is 100% theirs
-  // until a premium actually burns.
+  // Funding goes 100% to the user wallet. The 90/10 pool/platform split runs
+  // on the weekly burn instead — users can pre-fund many weeks and that money
+  // stays theirs until a premium actually burns.
   const { wallet } = await Wallet.credit({
     userId: user._id,
     amount: event.amountKobo,
@@ -90,20 +89,35 @@ const handleSquadWebhook = asyncHandler(async (req, res) => {
     description: `Wallet top-up via Squad (₦${event.amountKobo / 100})`,
   });
 
-  // Pay-to-activate: if the user is inactive and their NEW balance meets the
-  // weekly premium, flip them active.
-  if (!user.isActive && user.weeklyPremium && wallet.balance >= user.weeklyPremium) {
+  // Pay-to-activate: balance covering weeklyPremium flips an inactive user on.
+  const wasInactive = !user.isActive;
+  if (wasInactive && user.weeklyPremium && wallet.balance >= user.weeklyPremium) {
     user.isActive = true;
     await user.save();
   }
+  const justActivated = wasInactive && user.isActive;
 
-  try {
-    await sendSMS(
-      user.phone,
-      `BetaHealth: ₦${(event.amountKobo / 100).toLocaleString()} received. Wallet balance: ₦${(wallet.balance / 100).toLocaleString()}.${user.isActive ? ' Cover active.' : ''}`
+  const amountNaira = (event.amountKobo / 100).toLocaleString();
+  const balanceNaira = (wallet.balance / 100).toLocaleString();
+  await notifyUser(
+    user._id,
+    'funding_received',
+    'Wallet funded',
+    `BetaHealth: ₦${amountNaira} received. Wallet balance: ₦${balanceNaira}.${justActivated ? ' Cover active.' : ''}`,
+    {
+      amount: event.amountKobo,
+      balance: wallet.balance,
+      reference: event.transactionReference,
+    }
+  );
+  if (justActivated) {
+    await notifyUser(
+      user._id,
+      'cover_activated',
+      'Cover activated',
+      `BetaHealth: your cover is active. Weekly premium ₦${(user.weeklyPremium / 100).toLocaleString()} will burn each Monday.`,
+      { weeklyPremium: user.weeklyPremium }
     );
-  } catch (err) {
-    logger.warn({ err }, 'webhook: sms send failed (swallowed)');
   }
 
   logger.info(

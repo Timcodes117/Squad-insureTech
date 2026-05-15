@@ -40,8 +40,9 @@ const securitySchemes = {
 const tags = [
   { name: 'Health', description: 'Service readiness' },
   { name: 'Auth', description: 'Register, login, current user' },
-  { name: 'User', description: 'Wallet, transactions, claims, withdrawals (Bearer JWT)' },
-  { name: 'Hospital', description: 'Hospital registration + claim submission (x-hospital-api-key)' },
+  { name: 'Users', description: 'Wallet, transactions, claims, withdrawals (Bearer JWT)' },
+  { name: 'Notifications', description: 'In-app + SMS notifications feed (Bearer JWT)' },
+  { name: 'Hospitals', description: 'Hospital registration + claim submission (x-hospital-api-key)' },
   { name: 'Webhooks', description: 'Inbound Squad webhooks (HMAC signed)' },
   { name: 'Admin', description: 'Demo + ops triggers (x-admin-key)' },
 ];
@@ -320,6 +321,59 @@ const schemas = {
       perHospital: { type: 'array', items: { type: 'object' } },
     },
   },
+
+  Notification: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      userId: { type: 'string' },
+      type: {
+        type: 'string',
+        enum: [
+          'funding_received',
+          'premium_burned',
+          'cover_activated',
+          'cover_paused',
+          'claim_approved',
+          'claim_rejected',
+          'claim_flagged',
+          'withdrawal_complete',
+          'withdrawal_failed',
+          'low_balance',
+          'coverage_reset',
+          'preauth_code',
+          'system',
+        ],
+      },
+      title: { type: 'string' },
+      body: { type: 'string' },
+      data: { type: 'object', additionalProperties: true },
+      isRead: { type: 'boolean' },
+      readAt: { type: 'string', format: 'date-time', nullable: true },
+      channels: {
+        type: 'object',
+        properties: {
+          sms: {
+            type: 'object',
+            properties: {
+              sent: { type: 'boolean' },
+              sentAt: { type: 'string', format: 'date-time', nullable: true },
+              sid: { type: 'string', nullable: true },
+              error: { type: 'string', nullable: true },
+            },
+          },
+          inApp: {
+            type: 'object',
+            properties: {
+              delivered: { type: 'boolean' },
+              deliveredAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+      },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+  },
 };
 
 // Shared response definitions.
@@ -373,10 +427,42 @@ const paths = {
         'Creates user (inactive) + empty wallet, generates squadCustomerIdentifier, and asks Squad to create a virtual account. If Squad rejects the BVN, `data.virtualAccountWarning` is set and the user can retry via `/users/me/virtual-account/retry`.',
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/RegisterRequest' },
+            example: {
+              email: 'ada@test.co',
+              phone: '08012345678',
+              password: 'Str0ngP@ss',
+              fullName: 'Ada Lovelace',
+              dob: '1995-04-12',
+              bvn: '12345678901',
+              occupation: 'trader',
+              gender: 'female',
+              address: '5 Test St, Lagos',
+            },
+          },
+        },
       },
       responses: {
-        201: { $ref: '#/components/responses/Created201' },
+        201: {
+          description: 'User created',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'Registration successful',
+                data: {
+                  user: { id: '6a0656dfc70fe8e8f4606ca6', email: 'ada@test.co', isActive: false, riskTier: 'medium', weeklyPremium: 75000 },
+                  token: 'eyJhbGciOiJIUzI1NiIs...',
+                  wallet: { balance: 0 },
+                  virtualAccountWarning: 'Validation Failure, invalid BVN',
+                },
+              },
+            },
+          },
+        },
         400: { $ref: '#/components/responses/Error400' },
         409: { $ref: '#/components/responses/Error409' },
       },
@@ -388,10 +474,30 @@ const paths = {
       summary: 'Login by email OR phone',
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginRequest' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/LoginRequest' },
+            example: { identifier: '08012345678', password: 'Str0ngP@ss' },
+          },
+        },
       },
       responses: {
-        200: { $ref: '#/components/responses/Success200' },
+        200: {
+          description: 'Login successful',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'Login successful',
+                data: {
+                  user: { id: '6a0656dfc70fe8e8f4606ca6', email: 'ada@test.co', isActive: true },
+                  token: 'eyJhbGciOiJIUzI1NiIs...',
+                },
+              },
+            },
+          },
+        },
         401: { $ref: '#/components/responses/Error401' },
       },
     },
@@ -411,7 +517,7 @@ const paths = {
   // ---------------- User ----------------
   '/users/me/wallet': {
     get: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'Wallet + coverage snapshot',
       security: [{ bearerAuth: [] }],
       responses: { 200: { $ref: '#/components/responses/Success200' } },
@@ -419,7 +525,7 @@ const paths = {
   },
   '/users/me/transactions': {
     get: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'Ledger entries (newest-first)',
       security: [{ bearerAuth: [] }],
       parameters: [
@@ -431,19 +537,129 @@ const paths = {
   },
   '/users/me/claims': {
     get: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'My claims (newest-first)',
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
         { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
       ],
+      responses: {
+        200: {
+          description: 'List of claims',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  items: [
+                    {
+                      id: '6a05794d...',
+                      hospitalId: { id: '6a0574e3...', name: 'BetaHealth Demo Clinic' },
+                      status: 'paid',
+                      amount: 150000,
+                      amountCovered: 150000,
+                      amountGap: 0,
+                      treatmentType: 'malaria',
+                      paidAt: '2026-05-14T07:30:00.000Z',
+                    },
+                  ],
+                  pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  '/notifications': {
+    get: {
+      tags: ['Notifications'],
+      summary: 'List notifications (newest-first)',
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+        { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+        { name: 'unreadOnly', in: 'query', schema: { type: 'boolean', default: false } },
+      ],
+      responses: {
+        200: {
+          description: 'Notification feed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  items: [
+                    {
+                      id: '6a06...',
+                      type: 'funding_received',
+                      title: 'Wallet funded',
+                      body: 'BetaHealth: ₦10,000 received. Wallet balance: ₦10,000. Cover active.',
+                      data: { amount: 1000000, balance: 1000000 },
+                      isRead: false,
+                      channels: { sms: { sent: true, sentAt: '2026-05-14T07:00:00.000Z' }, inApp: { delivered: true } },
+                      createdAt: '2026-05-14T07:00:00.000Z',
+                    },
+                  ],
+                  total: 1,
+                  unreadCount: 1,
+                  pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  '/notifications/unread-count': {
+    get: {
+      tags: ['Notifications'],
+      summary: 'Unread count',
+      security: [{ bearerAuth: [] }],
       responses: { 200: { $ref: '#/components/responses/Success200' } },
+    },
+  },
+  '/notifications/{id}/read': {
+    post: {
+      tags: ['Notifications'],
+      summary: 'Mark one as read',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        404: { $ref: '#/components/responses/Error404' },
+      },
+    },
+  },
+  '/notifications/read-all': {
+    post: {
+      tags: ['Notifications'],
+      summary: 'Mark all as read',
+      security: [{ bearerAuth: [] }],
+      responses: { 200: { $ref: '#/components/responses/Success200' } },
+    },
+  },
+  '/notifications/{id}': {
+    delete: {
+      tags: ['Notifications'],
+      summary: 'Delete a notification',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        404: { $ref: '#/components/responses/Error404' },
+      },
     },
   },
   '/users/me/virtual-account/retry': {
     post: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'Retry Squad virtual-account creation',
       security: [{ bearerAuth: [] }],
       responses: {
@@ -454,7 +670,7 @@ const paths = {
   },
   '/users/me/withdrawable': {
     get: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'Max withdrawable amount (after reserving this week\'s premium)',
       security: [{ bearerAuth: [] }],
       responses: { 200: { $ref: '#/components/responses/Success200' } },
@@ -462,17 +678,41 @@ const paths = {
   },
   '/users/me/withdraw': {
     post: {
-      tags: ['User'],
+      tags: ['Users'],
       summary: 'Withdraw to a bank account',
       description:
         'Atomic: verifies destination via Squad lookup, debits wallet, initiates Squad transfer. If transfer fails after debit, immediately credits back with category `reversal`.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/WithdrawRequest' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/WithdrawRequest' },
+            example: { amount: 900000, bankCode: '000013', accountNumber: '0123456789' },
+          },
+        },
       },
       responses: {
-        200: { $ref: '#/components/responses/Success200' },
+        200: {
+          description: 'Transfer initiated',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'Withdrawal initiated',
+                data: {
+                  amount: 900000,
+                  accountName: 'ADA LOVELACE',
+                  bankCode: '000013',
+                  accountNumber: '0123456789',
+                  reference: 'SB5G8G58E8_X9K2L1MNPQRS',
+                  status: 'processing',
+                },
+              },
+            },
+          },
+        },
         400: { $ref: '#/components/responses/Error400' },
         502: { description: 'Squad transfer failed — wallet has been refunded' },
       },
@@ -482,7 +722,7 @@ const paths = {
   // ---------------- Hospital ----------------
   '/hospital/register': {
     post: {
-      tags: ['Hospital'],
+      tags: ['Hospitals'],
       summary: 'Open hospital registration (demo)',
       description: 'In production, gate behind admin approval + KYB. Calls Squad lookup to verify the bank account; if Squad permits, `isVerified` is true.',
       requestBody: {
@@ -498,7 +738,7 @@ const paths = {
   },
   '/hospital/users/lookup': {
     get: {
-      tags: ['Hospital'],
+      tags: ['Hospitals'],
       summary: 'Look up patient by phone + issue 4h preAuth code',
       security: [{ hospitalApiKey: [] }],
       parameters: [
@@ -517,21 +757,49 @@ const paths = {
   },
   '/hospital/claims': {
     post: {
-      tags: ['Hospital'],
+      tags: ['Hospitals'],
       summary: 'Submit claim (audited + paid or flagged)',
       security: [{ hospitalApiKey: [] }],
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/SubmitClaimRequest' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/SubmitClaimRequest' },
+            example: {
+              phone: '08012345678',
+              amount: 150000,
+              treatmentType: 'malaria',
+              clinicalNote: 'Fever, positive RDT',
+              preAuthCode: 'AB12CD',
+            },
+          },
+        },
       },
       responses: {
-        200: { $ref: '#/components/responses/Success200' },
+        200: {
+          description: 'Audited (paid, flagged, or rejected — see decision)',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'Claim approved and paid',
+                data: {
+                  claim: { id: '6a05794d...', status: 'paid', amountCovered: 150000, amountGap: 0 },
+                  decision: 'paid',
+                  transfer: { reference: 'SB5G_AB12CD34EFG', status: 'success' },
+                  coverageRemaining: 1850000,
+                },
+              },
+            },
+          },
+        },
         401: { $ref: '#/components/responses/Error401' },
         404: { $ref: '#/components/responses/Error404' },
       },
     },
     get: {
-      tags: ['Hospital'],
+      tags: ['Hospitals'],
       summary: 'List my hospital claims',
       security: [{ hospitalApiKey: [] }],
       parameters: [
@@ -552,10 +820,40 @@ const paths = {
       security: [{ squadSignature: [] }],
       requestBody: {
         required: true,
-        content: { 'application/json': { schema: { $ref: '#/components/schemas/SquadWebhook' } } },
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/SquadWebhook' },
+            example: {
+              event: 'virtual_account.credit',
+              data: {
+                transaction_reference: 'SQUAD_TEST_1778800671821_6F2EE811',
+                virtual_account_number: '9988800001',
+                principal_amount: '10000',
+                settled_amount: '10000',
+                currency_id: 'NGN',
+                transaction_date: '2026-05-15T07:19:50.000Z',
+                sender_name: 'JOHN PAYER',
+                remarks: 'BetaHealth funding',
+                channel: 'transfer',
+              },
+            },
+          },
+        },
       },
       responses: {
-        200: { $ref: '#/components/responses/Success200' },
+        200: {
+          description: 'Accepted (success, ignored, or duplicate)',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              examples: {
+                success: { value: { success: true } },
+                duplicate: { value: { success: true, duplicate: true } },
+                ignored: { value: { success: true, ignored: true, reason: 'no amount' } },
+              },
+            },
+          },
+        },
         401: { description: 'Invalid HMAC signature' },
       },
     },
@@ -642,9 +940,9 @@ const openapi = {
   openapi: '3.0.3',
   info: {
     title: 'BetaHealth API',
-    version: '0.3.0',
+    version: '1.0.0',
     description:
-      'Micro-HMO insurance for Nigeria\'s informal sector. Powered by Squad.\n\n**All money fields are in KOBO** (₦1 = 100 kobo). Squad webhooks send naira; the boundary converts.',
+      "Micro health cover for Nigeria's informal sector. Powered by Squad. All money amounts are in Kobo (1 Naira = 100 Kobo). All protected routes require `Authorization: Bearer <jwt>`.",
   },
   servers,
   tags,

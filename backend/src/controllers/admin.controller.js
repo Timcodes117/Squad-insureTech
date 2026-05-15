@@ -8,7 +8,7 @@ const User = require('../models/User');
 const Hospital = require('../models/Hospital');
 const PoolWallet = require('../models/PoolWallet');
 const squad = require('../services/squad');
-const { sendSMS } = require('../services/sms');
+const { notifyUser } = require('../services/notification');
 const { runPremiumBurn } = require('../jobs/premiumBurn');
 const { runCoverageReset } = require('../jobs/coverageReset');
 const { runHospitalAnomalyScan } = require('../jobs/hospitalAnomalyScan');
@@ -98,14 +98,20 @@ const approveFlaggedClaim = asyncHandler(async (req, res) => {
   claim.paidAt = new Date();
   await claim.save();
 
-  try {
-    await sendSMS(
-      user.phone,
-      `BetaHealth paid ₦${(amountCovered / 100).toLocaleString()} for your bill at ${hospital.name}. Coverage remaining: ₦${(user.coverageRemaining / 100).toLocaleString()}.`
-    );
-  } catch (err) {
-    logger.warn({ err }, 'admin.approveFlaggedClaim: SMS failed');
-  }
+  await notifyUser(
+    user._id,
+    'claim_approved',
+    'Claim paid',
+    `BetaHealth paid ₦${(amountCovered / 100).toLocaleString()} for your bill at ${hospital.name}. Coverage remaining: ₦${(user.coverageRemaining / 100).toLocaleString()}.`,
+    {
+      claimId: claim.id,
+      amountCovered,
+      amountGap,
+      coverageRemaining: user.coverageRemaining,
+      hospitalName: hospital.name,
+      adminApproved: true,
+    }
+  );
 
   res.json({
     success: true,

@@ -35,7 +35,6 @@ const walletSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Atomic credit: single findOneAndUpdate that bumps balance and appends ledger entry.
 walletSchema.statics.credit = async function credit({
   userId,
   amount,
@@ -51,7 +50,7 @@ walletSchema.statics.credit = async function credit({
     throw AppError.badRequest(`invalid ledger category: ${category}`);
   }
 
-  // First bump the balance atomically.
+  // Atomic $inc first so balanceAfter on the ledger entry is the real post-update value.
   const updated = await this.findOneAndUpdate(
     { userId },
     { $inc: { balance: amount } },
@@ -59,7 +58,6 @@ walletSchema.statics.credit = async function credit({
   );
   if (!updated) throw AppError.notFound('Wallet not found');
 
-  // Then atomically push the ledger entry with the resulting balance.
   const entry = {
     type: 'credit',
     amount,
@@ -74,7 +72,6 @@ walletSchema.statics.credit = async function credit({
   return { wallet: updated, entry };
 };
 
-// Atomic debit with sufficient-balance guard.
 walletSchema.statics.debit = async function debit({
   userId,
   amount,
@@ -90,7 +87,7 @@ walletSchema.statics.debit = async function debit({
     throw AppError.badRequest(`invalid ledger category: ${category}`);
   }
 
-  // Decrement only if balance is sufficient.
+  // Filter on balance >= amount so the decrement only applies if the funds exist.
   const updated = await this.findOneAndUpdate(
     { userId, balance: { $gte: amount } },
     { $inc: { balance: -amount } },

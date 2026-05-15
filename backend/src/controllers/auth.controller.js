@@ -27,7 +27,7 @@ const register = asyncHandler(async (req, res) => {
   const user = new User({
     email,
     phone,
-    passwordHash: password, // hashed by pre-save hook
+    passwordHash: password,
     fullName,
     dob,
     bvn,
@@ -41,15 +41,13 @@ const register = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  // Create wallet eagerly so the very first webhook always finds a row to credit.
+  // Wallet is created eagerly so the first funding webhook has a row to credit.
   const wallet = await Wallet.create({ userId: user._id, balance: 0, ledger: [] });
 
-  // Provision the Squad virtual account. If Squad rejects (BVN/name/dob mismatch
-  // is the common cause), keep the user — they can retry via the dedicated endpoint.
+  // Squad commonly rejects this on BVN/name/dob mismatch — we keep the user and
+  // surface the error so they can retry via /users/me/virtual-account/retry.
   let virtualAccountWarning = null;
   try {
-    // The in-memory user doc has bvn (we just set it); passing the doc directly
-    // works because the service reads fields, not the bcrypted hash.
     const vaResult = await squad.createVirtualAccount(user);
 
     if (vaResult.success && vaResult.virtualAccountNumber) {
@@ -101,9 +99,8 @@ const login = asyncHandler(async (req, res) => {
   const ok = await user.comparePassword(password);
   if (!ok) throw AppError.unauthorized('Invalid credentials');
 
-  // Inactive users can still log in — they need to see their wallet to fund it.
-  // The "inactive" state only gates claim submission, not API access.
-
+  // Inactive users can still log in — "inactive" only gates claim submission,
+  // not API access; they need wallet visibility to fund and activate.
   const token = signToken(user);
 
   res.json({

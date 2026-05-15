@@ -3,9 +3,8 @@
 const crypto = require('crypto');
 const config = require('../../config/env');
 
-// Squad signs the raw request body with HMAC SHA512 keyed by the merchant secret
-// key, sending the hex digest in the `x-squad-encrypted-body` header.
-// We verify with crypto.timingSafeEqual on a normalised (uppercase) comparison.
+// Squad uppercases the digest before sending it in x-squad-encrypted-body,
+// so both sides are normalised to uppercase before timing-safe compare.
 function verifyWebhookSignature(rawBodyBuffer, signatureFromHeader) {
   if (!rawBodyBuffer || !signatureFromHeader) return false;
 

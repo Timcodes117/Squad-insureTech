@@ -6,13 +6,12 @@ const AppError = require('../utils/AppError');
 const Wallet = require('../models/Wallet');
 const Claim = require('../models/Claim');
 const squad = require('../services/squad');
-const { sendSMS } = require('../services/sms');
+const { notifyUser } = require('../services/notification');
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
 
-// Reserved = the user's weeklyPremium if they have NOT yet burned this week.
-// This stops a user from withdrawing money that's about to be owed for the
-// currently-active week.
+// Locks one week's premium against withdrawal if the user hasn't burned yet
+// this week — otherwise they could pull money that's about to be owed.
 function computeReserved(user) {
   const premium = user.weeklyPremium || 0;
   if (!premium) return 0;
@@ -22,7 +21,6 @@ function computeReserved(user) {
   return 0;
 }
 
-// GET /api/v1/users/me/wallet
 const getWallet = asyncHandler(async (req, res) => {
   const user = req.user;
   const wallet = await Wallet.findOne({ userId: user._id }).select('balance');
@@ -43,9 +41,6 @@ const getWallet = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/v1/users/me/transactions
-// Returns ledger entries newest-first, projected to the shape the frontend wants:
-// { type, amount, category, description, balanceAfter, reference, createdAt }
 const listTransactions = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
 
@@ -77,7 +72,6 @@ const listTransactions = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/v1/users/me/claims
 const listClaims = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
   const skip = (page - 1) * limit;
@@ -101,7 +95,6 @@ const listClaims = asyncHandler(async (req, res) => {
   });
 });
 
-// POST /api/v1/users/me/virtual-account/retry
 const retryVirtualAccount = asyncHandler(async (req, res) => {
   const user = req.user;
 
@@ -117,8 +110,8 @@ const retryVirtualAccount = asyncHandler(async (req, res) => {
     });
   }
 
-  // Need the BVN to retry — it's select:false, so refetch.
   const User = require('../models/User');
+  // BVN is select:false on the schema; explicit project to pull it back.
   const fullUser = await User.findById(user._id).select('+bvn');
   if (!fullUser?.bvn) {
     throw AppError.badRequest(
@@ -151,7 +144,6 @@ const retryVirtualAccount = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/v1/users/me/withdrawable
 const getWithdrawable = asyncHandler(async (req, res) => {
   const user = req.user;
   const wallet = await Wallet.findOne({ userId: user._id }).select('balance').lean();
@@ -172,9 +164,8 @@ const getWithdrawable = asyncHandler(async (req, res) => {
   });
 });
 
-// POST /api/v1/users/me/withdraw
-// Atomic-ish flow with explicit reversal: if Squad transfer fails after the
-// wallet debit, immediately credit the user back so money never sits in limbo.
+// If the Squad transfer fails after the wallet debit, we immediately credit
+// back with category 'reversal' — money never sits in limbo.
 const withdraw = asyncHandler(async (req, res) => {
   const user = req.user;
   const { amount, bankCode, accountNumber } = req.body;
@@ -192,7 +183,6 @@ const withdraw = asyncHandler(async (req, res) => {
     );
   }
 
-  // Verify destination account.
   const lookup = await squad.lookupAccount(bankCode, accountNumber);
   if (!lookup.success || !lookup.accountName) {
     throw AppError.badRequest(
@@ -201,7 +191,7 @@ const withdraw = asyncHandler(async (req, res) => {
   }
   const accountName = lookup.accountName;
 
-  // Debit first (atomic). If this throws, we never charged Squad.
+  // Debit first — if Wallet.debit throws (insufficient funds, race), Squad is never called.
   const debitRef = `WD_${user.id}_${Date.now()}`;
   await Wallet.debit({
     userId: user._id,
@@ -221,7 +211,6 @@ const withdraw = asyncHandler(async (req, res) => {
   });
 
   if (!transfer.success || transfer.status === 'failed') {
-    // REVERSE the debit immediately — never leave the user's money in limbo.
     try {
       await Wallet.credit({
         userId: user._id,
@@ -236,6 +225,13 @@ const withdraw = asyncHandler(async (req, res) => {
         'withdraw: CRITICAL — reversal failed; manual reconciliation required'
       );
     }
+    await notifyUser(
+      user._id,
+      'withdrawal_failed',
+      'Withdrawal failed',
+      `BetaHealth: your ₦${(amount / 100).toLocaleString()} withdrawal could not be processed. Your wallet has been refunded.`,
+      { amount, error: transfer.error || transfer.status, reference: transfer.reference || null }
+    );
     return res.status(502).json({
       success: false,
       error: transfer.error || 'Transfer failed to initiate. Your wallet has been refunded.',
@@ -243,15 +239,13 @@ const withdraw = asyncHandler(async (req, res) => {
     });
   }
 
-  // Best-effort SMS — never breaks the flow.
-  try {
-    await sendSMS(
-      user.phone,
-      `BetaHealth: ₦${(amount / 100).toLocaleString()} withdrawn to your ${accountName} account.`
-    );
-  } catch (err) {
-    logger.warn({ err }, 'withdraw: sms failed (swallowed)');
-  }
+  await notifyUser(
+    user._id,
+    'withdrawal_complete',
+    'Withdrawal sent',
+    `BetaHealth: ₦${(amount / 100).toLocaleString()} withdrawn to your ${accountName} account.`,
+    { amount, accountName, bankCode, accountNumber, reference: transfer.reference }
+  );
 
   res.json({
     success: true,

@@ -11,26 +11,11 @@ const { runHospitalAnomalyScan } = require('./hospitalAnomalyScan');
 const QUEUE_NAME = 'betahealth-jobs';
 const TZ = 'Africa/Lagos';
 
-// Cron expressions (Africa/Lagos local time).
+// Cron expressions in Africa/Lagos local time.
 const SCHEDULES = [
-  // Premium burn: every Monday 09:00.
-  {
-    name: 'premiumBurn',
-    pattern: '0 9 * * 1',
-    handler: () => runPremiumBurn({}),
-  },
-  // Coverage reset: every day 00:30 — only resets users whose own 30-day cycle elapsed.
-  {
-    name: 'coverageReset',
-    pattern: '30 0 * * *',
-    handler: () => runCoverageReset({}),
-  },
-  // Hospital anomaly scan: every day 01:00.
-  {
-    name: 'hospitalAnomalyScan',
-    pattern: '0 1 * * *',
-    handler: () => runHospitalAnomalyScan({}),
-  },
+  { name: 'premiumBurn', pattern: '0 9 * * 1', handler: () => runPremiumBurn({}) },
+  { name: 'coverageReset', pattern: '30 0 * * *', handler: () => runCoverageReset({}) },
+  { name: 'hospitalAnomalyScan', pattern: '0 1 * * *', handler: () => runHospitalAnomalyScan({}) },
 ];
 
 let queue = null;
@@ -74,7 +59,7 @@ async function start() {
           repeat: { pattern: s.pattern, tz: TZ },
           removeOnComplete: 50,
           removeOnFail: 100,
-          jobId: `${s.name}:repeat`, // collapse if added twice
+          jobId: `${s.name}:repeat`,
         }
       );
     }

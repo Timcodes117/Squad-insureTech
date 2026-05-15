@@ -76,8 +76,8 @@ const userSchema = new mongoose.Schema(
       default: 'user',
       index: true,
     },
-    // Pay-to-activate: users register inactive and only become active once
-    // their wallet balance meets the weekly premium (flipped by the funding webhook).
+    // Pay-to-activate: registered users start inactive and are flipped active
+    // by the funding webhook once balance >= weeklyPremium.
     isActive: {
       type: Boolean,
       default: false,
@@ -112,7 +112,6 @@ const userSchema = new mongoose.Schema(
     preAuthExpiresAt: {
       type: Date,
     },
-    // Coverage stored in KOBO. ₦20,000 = 2,000,000 kobo.
     coverageLimit: {
       type: Number,
       default: 2_000_000,
@@ -154,7 +153,7 @@ userSchema.pre('save', async function preSave(next) {
       return next();
     }
 
-    // Only hash if the value doesn't already look like a bcrypt hash.
+    // Skip re-hashing if the value is already a bcrypt digest (seed scripts pass raw passwords).
     if (typeof this.passwordHash === 'string' && /^\$2[aby]\$\d+\$/.test(this.passwordHash)) {
       return next();
     }
