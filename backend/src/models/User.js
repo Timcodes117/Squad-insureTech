@@ -112,6 +112,22 @@ const userSchema = new mongoose.Schema(
     preAuthExpiresAt: {
       type: Date,
     },
+    // Login OTP (request-otp → verify-otp two-step flow).
+    loginOtp: {
+      type: String,
+      select: false,
+    },
+    loginOtpExpiresAt: {
+      type: Date,
+    },
+    // Face verification token issued by /hospital/users/face-verify, single-use
+    // and short-lived. Attached to a claim when submitted with this token.
+    faceVerifiedToken: {
+      type: String,
+    },
+    faceVerifiedExpiresAt: {
+      type: Date,
+    },
     coverageLimit: {
       type: Number,
       default: 2_000_000,

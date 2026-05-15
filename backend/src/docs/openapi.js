@@ -232,6 +232,23 @@ const schemas = {
       treatmentType: { type: 'string', example: 'malaria' },
       clinicalNote: { type: 'string', example: 'Fever, positive RDT' },
       preAuthCode: { type: 'string', example: 'AB12CD' },
+      faceVerificationToken: {
+        type: 'string',
+        description: 'Optional. Token issued by /hospital/users/face-verify (10-min single-use).',
+        example: 'fv_abc123...',
+      },
+    },
+  },
+  FaceVerifyRequest: {
+    type: 'object',
+    required: ['phone', 'image'],
+    properties: {
+      phone: { type: 'string', example: '08099000010' },
+      image: {
+        type: 'string',
+        description: 'Base64 image bytes (or any string in the hackathon stub). Verification always returns true; the real implementation would call a face-match service.',
+        example: 'data:image/jpeg;base64,/9j/4AAQ...',
+      },
     },
   },
   Claim: {
@@ -342,6 +359,8 @@ const schemas = {
           'low_balance',
           'coverage_reset',
           'preauth_code',
+          'login_otp',
+          'face_verified',
           'system',
         ],
       },
@@ -494,6 +513,77 @@ const paths = {
                   user: { id: '6a0656dfc70fe8e8f4606ca6', email: 'ada@test.co', isActive: true },
                   token: 'eyJhbGciOiJIUzI1NiIs...',
                 },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Error401' },
+      },
+    },
+  },
+  '/auth/login/request-otp': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Two-step login — step 1: verify password + send 6-digit OTP',
+      description:
+        'Verifies the password and sends a 6-digit OTP to the user via in-app notification + SMS (10-minute expiry). Does NOT issue a JWT — call `/auth/login/verify-otp` next with the code to get one.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/LoginRequest' },
+            example: { identifier: '08099000010', password: 'demo1234' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'OTP issued',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'OTP sent. Check your phone or in-app notifications.',
+                data: { identifier: '08099000010', expiresAt: '2026-05-15T11:50:00.000Z' },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Error401' },
+      },
+    },
+  },
+  '/auth/login/verify-otp': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Two-step login — step 2: exchange OTP for a JWT',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identifier', 'code'],
+              properties: {
+                identifier: { type: 'string', example: '08099000010' },
+                code: { type: 'string', pattern: '^\\d{6}$', example: '123456' },
+              },
+            },
+            example: { identifier: '08099000010', code: '123456' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'JWT issued',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'Login successful',
+                data: { user: { id: '6a07...', email: 'demo-a@betahealth.test' }, token: 'eyJhbGciOi...' },
               },
             },
           },
@@ -751,6 +841,45 @@ const paths = {
       ],
       responses: {
         200: { $ref: '#/components/responses/Success200' },
+        404: { $ref: '#/components/responses/Error404' },
+      },
+    },
+  },
+  '/hospital/users/face-verify': {
+    post: {
+      tags: ['Hospitals'],
+      summary: 'Face verification (dummy — always returns verified=true)',
+      description:
+        'Hackathon stub: confirms the patient is physically present by face check. The actual ML model is not wired — verification always succeeds. Issues a single-use, 10-minute `faceVerificationToken` the hospital can attach to the subsequent claim submission to record that face verification took place.',
+      security: [{ hospitalApiKey: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/FaceVerifyRequest' },
+            example: { phone: '08099000010', image: 'data:image/jpeg;base64,/9j/4AAQ...' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Verification result',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  verified: true,
+                  confidence: 0.97,
+                  faceVerificationToken: 'fv_kx29l1...',
+                  expiresAt: '2026-05-15T11:42:00.000Z',
+                  imageBytesReceived: 4321,
+                },
+              },
+            },
+          },
+        },
         404: { $ref: '#/components/responses/Error404' },
       },
     },

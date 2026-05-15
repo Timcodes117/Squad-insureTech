@@ -25,6 +25,15 @@ const submitClaimBody = Joi.object({
   treatmentType: Joi.string().min(2).max(80).trim().required(),
   clinicalNote: Joi.string().max(2000).trim().optional().allow(''),
   preAuthCode: Joi.string().min(4).max(20).required(),
+  // Optional — if provided, attached to the claim audit trail.
+  faceVerificationToken: Joi.string().optional().allow(''),
+});
+
+const faceVerifyBody = Joi.object({
+  phone: Joi.string().pattern(NIGERIAN_PHONE_REGEX).required(),
+  // For the demo this is any non-empty string (base64 image, file path, etc.).
+  // Production would replace with a real face-match service call.
+  image: Joi.string().min(1).required(),
 });
 
 const listQuery = Joi.object({
@@ -36,5 +45,6 @@ module.exports = {
   registerBody,
   userLookupQuery,
   submitClaimBody,
+  faceVerifyBody,
   listQuery,
 };

@@ -1,0 +1,539 @@
+{
+  "info": {
+    "name": "BetaHealth API",
+    "_postman_id": "betahealth-collection-v1",
+    "description": "Micro health cover for Nigeria's informal sector. All money in kobo (₦1 = 100 kobo).\n\nThree auth schemes:\n- `{{jwt}}` — Bearer token from /auth/login or /auth/login/verify-otp\n- `{{hospitalApiKey}}` — header `x-hospital-api-key`, from POST /hospital/register\n- `{{adminKey}}` — header `x-admin-key`, from .env ADMIN_KEY\n\nSet collection variables under the **Variables** tab.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/v1" },
+    { "key": "jwt", "value": "" },
+    { "key": "hospitalApiKey", "value": "" },
+    { "key": "adminKey", "value": "local_dev_admin_key_change_me" },
+    { "key": "userPhone", "value": "08099000010" },
+    { "key": "userPassword", "value": "demo1234" },
+    { "key": "userId", "value": "" },
+    { "key": "hospitalId", "value": "" },
+    { "key": "claimId", "value": "" },
+    { "key": "preAuthCode", "value": "" },
+    { "key": "faceToken", "value": "" },
+    { "key": "otpCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@test.co\",\n  \"phone\": \"08012345678\",\n  \"password\": \"Str0ngP@ss\",\n  \"fullName\": \"Ada Lovelace\",\n  \"dob\": \"1995-04-12\",\n  \"bvn\": \"12345678901\",\n  \"occupation\": \"trader\",\n  \"gender\": \"female\",\n  \"address\": \"5 Test St, Lagos\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "POST /auth/login (password only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.token) {",
+                  "  pm.collectionVariables.set('jwt', r.data.token);",
+                  "  pm.collectionVariables.set('userId', r.data.user.id);",
+                  "  console.log('JWT stored as {{jwt}}');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login/request-otp",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/request-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login", "request-otp"]
+            },
+            "description": "Step 1 of two-step login. Sends a 6-digit OTP via SMS + in-app notification. Copy the code (from the SMS or from GET /notifications) and use it in step 2."
+          }
+        },
+        {
+          "name": "POST /auth/login/verify-otp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.token) {",
+                  "  pm.collectionVariables.set('jwt', r.data.token);",
+                  "  pm.collectionVariables.set('userId', r.data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\",\n  \"code\": \"{{otpCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "GET /auth/me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "GET /users/me/wallet",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{baseUrl}}/users/me/wallet", "host": ["{{baseUrl}}"], "path": ["users", "me", "wallet"] }
+          }
+        },
+        {
+          "name": "GET /users/me/transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/transactions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /users/me/claims",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/claims?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "claims"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /users/me/withdrawable",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/withdrawable",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "withdrawable"]
+            }
+          }
+        },
+        {
+          "name": "POST /users/me/withdraw",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 800000,\n  \"bankCode\": \"000013\",\n  \"accountNumber\": \"0123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/withdraw",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "withdraw"]
+            },
+            "description": "Amount is in kobo. ₦8,000 = 800000."
+          }
+        },
+        {
+          "name": "POST /users/me/virtual-account/retry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/virtual-account/retry",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "virtual-account", "retry"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET /notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?page=1&limit=20&unreadOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "unreadOnly", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /notifications/unread-count",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "unread-count"]
+            }
+          }
+        },
+        {
+          "name": "POST /notifications/:id/read",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "{{notificationId}}", "read"]
+            }
+          }
+        },
+        {
+          "name": "POST /notifications/read-all",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "read-all"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /notifications/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "{{notificationId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Hospitals",
+      "item": [
+        {
+          "name": "POST /hospital/register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.apiKey) {",
+                  "  pm.collectionVariables.set('hospitalApiKey', r.data.apiKey);",
+                  "  pm.collectionVariables.set('hospitalId', r.data.hospital.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sunrise Clinic\",\n  \"contactPhone\": \"08012345677\",\n  \"email\": \"sunrise@test.co\",\n  \"address\": \"12 Health St, Lagos\",\n  \"bankCode\": \"000013\",\n  \"accountNumber\": \"0123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hospital/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "register"]
+            }
+          }
+        },
+        {
+          "name": "GET /hospital/users/lookup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.preAuthCode) {",
+                  "  pm.collectionVariables.set('preAuthCode', r.data.preAuthCode);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/hospital/users/lookup?phone={{userPhone}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "users", "lookup"],
+              "query": [{ "key": "phone", "value": "{{userPhone}}" }]
+            }
+          }
+        },
+        {
+          "name": "POST /hospital/users/face-verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.faceVerificationToken) {",
+                  "  pm.collectionVariables.set('faceToken', r.data.faceVerificationToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{userPhone}}\",\n  \"image\": \"data:image/jpeg;base64,FAKE_IMAGE_BYTES\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hospital/users/face-verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "users", "face-verify"]
+            },
+            "description": "Dummy face verification — always returns verified=true. Issues a 10-minute single-use token that you can attach to the next /hospital/claims request."
+          }
+        },
+        {
+          "name": "POST /hospital/claims",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.claim) {",
+                  "  pm.collectionVariables.set('claimId', r.data.claim.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{userPhone}}\",\n  \"amount\": 150000,\n  \"treatmentType\": \"malaria\",\n  \"clinicalNote\": \"Patient presented with fever, positive RDT\",\n  \"preAuthCode\": \"{{preAuthCode}}\",\n  \"faceVerificationToken\": \"{{faceToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/hospital/claims",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "claims"]
+            },
+            "description": "amount is in kobo (₦1,500 = 150000). faceVerificationToken is optional — leave blank if not running the face-verify step."
+          }
+        },
+        {
+          "name": "GET /hospital/claims",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/hospital/claims?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "claims"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "POST /webhooks/squad (manual — needs HMAC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-squad-encrypted-body", "value": "<paste HMAC SHA-512 hex digest, UPPERCASE>" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"virtual_account.credit\",\n  \"data\": {\n    \"transaction_reference\": \"SQUAD_TEST_001\",\n    \"virtual_account_number\": \"9988800030\",\n    \"settled_amount\": \"1000\",\n    \"principal_amount\": \"1000\",\n    \"currency_id\": \"NGN\",\n    \"transaction_date\": \"2026-05-15T07:00:00.000Z\",\n    \"sender_name\": \"JOHN PAYER\",\n    \"channel\": \"transfer\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/squad", "host": ["{{baseUrl}}"], "path": ["webhooks", "squad"] },
+            "description": "For easier local testing, use `node scripts/simulateWebhook.js --va 9988800030 --amount 1000` from the backend folder — it signs the body for you. If you do test it from Postman, generate the signature with: `HMAC_SHA512(SQUAD_SECRET_KEY, raw_body).hex().toUpperCase()`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "POST /admin/jobs/run-premium-burn",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-key", "value": "{{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/jobs/run-premium-burn",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "jobs", "run-premium-burn"]
+            },
+            "description": "Run the weekly premium burn now. Omit userId in the body to run for all users."
+          }
+        },
+        {
+          "name": "POST /admin/jobs/run-coverage-reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-key", "value": "{{adminKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/jobs/run-coverage-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "jobs", "run-coverage-reset"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/jobs/run-hospital-anomaly-scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-key", "value": "{{adminKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/jobs/run-hospital-anomaly-scan",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "jobs", "run-hospital-anomaly-scan"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/claims/:id/approve",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/claims/{{claimId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "claims", "{{claimId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "POST /admin/hospitals/:id/clear-flag",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/hospitals/{{hospitalId}}/clear-flag",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "hospitals", "{{hospitalId}}", "clear-flag"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

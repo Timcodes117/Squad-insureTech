@@ -15,6 +15,8 @@ const TYPES = [
   'low_balance',
   'coverage_reset',
   'preauth_code',
+  'login_otp',
+  'face_verified',
   'system',
 ];
 

@@ -18,6 +18,13 @@ router.get(
 );
 
 router.post(
+  '/users/face-verify',
+  hospitalAuth,
+  validateRequest({ body: v.faceVerifyBody }),
+  c.verifyFace
+);
+
+router.post(
   '/claims',
   hospitalAuth,
   validateRequest({ body: v.submitClaimBody }),

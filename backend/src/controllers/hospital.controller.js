@@ -12,7 +12,9 @@ const { auditClaim } = require('../services/claimAuditor');
 const { notifyUser } = require('../services/notification');
 
 const preAuthCodeGen = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
+const faceTokenGen = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 24);
 const PRE_AUTH_TTL_MS = 4 * 60 * 60 * 1000;
+const FACE_TTL_MS = 10 * 60 * 1000;
 
 // Open registration is a hackathon shortcut. Production should gate this behind
 // admin approval + KYB document upload.
@@ -91,6 +93,42 @@ const lookupUser = asyncHandler(async (req, res) => {
   });
 });
 
+// Dummy face verification for the cash-claim flow. Always returns verified=true
+// for the demo — the real implementation would call a face-match service here.
+// Issues a single-use, short-lived token the hospital can attach to the claim
+// so the audit trail records that face verification happened.
+const verifyFace = asyncHandler(async (req, res) => {
+  const { phone, image } = req.body;
+
+  const user = await User.findOne({ phone });
+  if (!user) throw AppError.notFound('No BetaHealth user with that phone');
+
+  const token = `fv_${faceTokenGen()}`;
+  user.faceVerifiedToken = token;
+  user.faceVerifiedExpiresAt = new Date(Date.now() + FACE_TTL_MS);
+  await user.save();
+
+  await notifyUser(
+    user._id,
+    'face_verified',
+    'Face verified at hospital',
+    `BetaHealth: a hospital just confirmed your identity by face check. If this wasn't you, contact support.`,
+    { expiresAt: user.faceVerifiedExpiresAt }
+  );
+
+  res.json({
+    success: true,
+    data: {
+      verified: true,
+      confidence: 0.97,
+      faceVerificationToken: token,
+      expiresAt: user.faceVerifiedExpiresAt,
+      // Mocked for the hackathon — the bytes are ignored.
+      imageBytesReceived: typeof image === 'string' ? image.length : 0,
+    },
+  });
+});
+
 function isPreAuthValid(user, providedCode) {
   if (!user.preAuthCode || !user.preAuthExpiresAt) return false;
   if (user.preAuthCode !== String(providedCode)) return false;
@@ -99,7 +137,7 @@ function isPreAuthValid(user, providedCode) {
 }
 
 const submitClaim = asyncHandler(async (req, res) => {
-  const { phone, amount, treatmentType, clinicalNote, preAuthCode } = req.body;
+  const { phone, amount, treatmentType, clinicalNote, preAuthCode, faceVerificationToken } = req.body;
   const hospital = req.hospital;
 
   const user = await User.findOne({ phone });
@@ -107,6 +145,21 @@ const submitClaim = asyncHandler(async (req, res) => {
 
   if (!isPreAuthValid(user, preAuthCode)) {
     throw AppError.unauthorized('preAuthCode invalid or expired — request a fresh one from the patient');
+  }
+
+  // Optional face-verify gate. If a token is sent, it must match and be unexpired.
+  // If omitted, the claim is still accepted (back-compat with hospitals that
+  // haven't shipped the face-verify UI yet).
+  let faceVerified = false;
+  if (faceVerificationToken) {
+    const matches =
+      user.faceVerifiedToken === String(faceVerificationToken) &&
+      user.faceVerifiedExpiresAt &&
+      new Date(user.faceVerifiedExpiresAt).getTime() >= Date.now();
+    if (!matches) {
+      throw AppError.unauthorized('Face verification token invalid or expired — re-run /face-verify');
+    }
+    faceVerified = true;
   }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -131,6 +184,7 @@ const submitClaim = asyncHandler(async (req, res) => {
     treatmentType,
     clinicalNote,
     preAuthCode,
+    faceVerified,
     auditorChecks: audit.checks,
   });
 
@@ -249,9 +303,11 @@ const submitClaim = asyncHandler(async (req, res) => {
     description: `Claim ${claim._id} payout to ${hospital.name}`,
   });
   user.coverageRemaining = Math.max(0, user.coverageRemaining - amountCovered);
-  // Single-use pre-auth: clear so the same code can't authorise another claim.
+  // Single-use pre-auth + face token: clear both so they can't authorise another claim.
   user.preAuthCode = undefined;
   user.preAuthExpiresAt = undefined;
+  user.faceVerifiedToken = undefined;
+  user.faceVerifiedExpiresAt = undefined;
   await user.save();
 
   claim.status = 'paid';
@@ -320,6 +376,7 @@ const listClaims = asyncHandler(async (req, res) => {
 module.exports = {
   registerHospital,
   lookupUser,
+  verifyFace,
   submitClaim,
   listClaims,
 };
