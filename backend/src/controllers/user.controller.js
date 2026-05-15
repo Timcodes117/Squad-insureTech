@@ -263,18 +263,22 @@ const withdraw = asyncHandler(async (req, res) => {
   });
 });
 
-// Returns the user's membership number + a QR code as a PNG data URL.
-// Generates the membership number lazily for legacy rows that pre-date the
+// Returns the user's membership number. The QR image itself is rendered
+// client-side from `qrPayload` (React Native + every modern web framework has
+// a QR component). Pass `?withImage=true` to also receive a base64 PNG data
+// URL — useful for emailing a card or printing without a client-side renderer.
+// Membership number is lazily generated for legacy rows that pre-date the
 // pre-save hook.
 const getMembershipCard = asyncHandler(async (req, res) => {
   const user = req.user;
+  const withImage = req.query?.withImage === 'true' || req.query?.withImage === true;
 
   if (!user.membershipNumber) {
     user.membershipNumber = generateMembershipNumber();
     try {
       await user.save();
     } catch (err) {
-      // Unique-collision retry (one shot is enough — 30 bits of entropy).
+      // 30 bits of entropy — collisions are vanishingly rare. One retry is enough.
       if (err.code === 11000) {
         user.membershipNumber = generateMembershipNumber();
         await user.save();
@@ -285,26 +289,26 @@ const getMembershipCard = asyncHandler(async (req, res) => {
   }
 
   const payload = user.membershipNumber;
-  let qrCodeDataUrl = null;
-  try {
-    qrCodeDataUrl = await QRCode.toDataURL(payload, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 320,
-    });
-  } catch (err) {
-    logger.warn({ err }, 'card: failed to generate QR — returning payload only');
+  const data = {
+    membershipNumber: user.membershipNumber,
+    fullName: user.fullName,
+    qrPayload: payload,
+  };
+
+  if (withImage) {
+    try {
+      data.qrCodeDataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+      });
+    } catch (err) {
+      logger.warn({ err }, 'card: failed to generate QR image — returning payload only');
+      data.qrCodeDataUrl = null;
+    }
   }
 
-  res.json({
-    success: true,
-    data: {
-      membershipNumber: user.membershipNumber,
-      fullName: user.fullName,
-      qrPayload: payload,
-      qrCodeDataUrl,
-    },
-  });
+  res.json({ success: true, data });
 });
 
 module.exports = {

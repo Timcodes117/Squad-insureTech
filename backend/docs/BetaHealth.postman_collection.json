@@ -144,7 +144,7 @@
           }
         },
         {
-          "name": "GET /users/me/card",
+          "name": "GET /users/me/card (lean — client renders QR)",
           "event": [
             {
               "listen": "test",
@@ -162,7 +162,21 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
             "url": { "raw": "{{baseUrl}}/users/me/card", "host": ["{{baseUrl}}"], "path": ["users", "me", "card"] },
-            "description": "Returns membership number (BH-XXXXXXXXX) + QR code as a PNG data URL. Render qrCodeDataUrl directly in an <img src>. Use the membership number for the future physical card and as an alternative lookup key for hospitals."
+            "description": "Default response: { membershipNumber, fullName, qrPayload }. The client renders the QR from qrPayload — React Native + every web framework has a QR component. Use the membership number for the future physical card and as a lookup key for hospitals scanning the QR."
+          }
+        },
+        {
+          "name": "GET /users/me/card?withImage=true (server-rendered PNG)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/card?withImage=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "card"],
+              "query": [{ "key": "withImage", "value": "true" }]
+            },
+            "description": "Adds qrCodeDataUrl (base64 PNG, ~3-5KB). Use this when the client can't render a QR locally — emailing a card, printing without a client-side renderer."
           }
         },
         {

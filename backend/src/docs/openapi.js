@@ -246,12 +246,13 @@ const schemas = {
       fullName: { type: 'string', example: 'Adaeze Mature' },
       qrPayload: {
         type: 'string',
-        description: 'String encoded inside the QR — currently the membership number itself.',
+        description: 'String to encode into the QR (currently the membership number itself). Clients render the QR locally.',
         example: 'BH-AB23JKL5M',
       },
       qrCodeDataUrl: {
         type: 'string',
-        description: 'PNG data URL (base64) — render directly in <img src>.',
+        nullable: true,
+        description: 'Base64 PNG. Only present when ?withImage=true.',
         example: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
       },
     },
@@ -633,23 +634,46 @@ const paths = {
   '/users/me/card': {
     get: {
       tags: ['Users'],
-      summary: 'Membership card (number + QR code data URL)',
+      summary: 'Membership card (number + QR payload)',
       description:
-        'Returns the user\'s BH-XXXXXXXXX membership number plus a QR code as a PNG data URL. Use for the in-app digital card and the future physical card print. Membership number is generated lazily on first read for legacy rows.',
+        'Returns the user\'s BH-XXXXXXXXX membership number and the string to encode into a QR. By default the client renders the QR (React Native and every modern web framework has a component for this). Pass `?withImage=true` to also receive a base64 PNG data URL — useful for emailing a card or printing without a client-side renderer. Membership number is generated lazily on first read for legacy rows.',
       security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: 'withImage',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean', default: false },
+          description: 'When true, response includes `qrCodeDataUrl` (base64 PNG).',
+        },
+      ],
       responses: {
         200: {
           description: 'Card payload',
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ApiSuccess' },
-              example: {
-                success: true,
-                data: {
-                  membershipNumber: 'BH-AB23JKL5M',
-                  fullName: 'Adaeze Mature',
-                  qrPayload: 'BH-AB23JKL5M',
-                  qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+              examples: {
+                'default (lean)': {
+                  value: {
+                    success: true,
+                    data: {
+                      membershipNumber: 'BH-AB23JKL5M',
+                      fullName: 'Adaeze Mature',
+                      qrPayload: 'BH-AB23JKL5M',
+                    },
+                  },
+                },
+                'with image': {
+                  value: {
+                    success: true,
+                    data: {
+                      membershipNumber: 'BH-AB23JKL5M',
+                      fullName: 'Adaeze Mature',
+                      qrPayload: 'BH-AB23JKL5M',
+                      qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+                    },
+                  },
                 },
               },
             },
