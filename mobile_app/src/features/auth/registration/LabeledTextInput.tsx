@@ -10,15 +10,18 @@ type Props = {
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
-  keyboardType?: 'default' | 'numeric' | 'phone-pad' | 'email-address';
+  keyboardType?: 'default' | 'numeric' | 'number-pad' | 'phone-pad' | 'email-address';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   maxLength?: number;
   leftAccessory?: ReactNode;
   rightAccessory?: ReactNode;
   accessibilityLabel?: string;
   secureTextEntry?: boolean;
-  autoComplete?: 'password' | 'off' | 'sms-otp';
+  autoComplete?: TextInputProps['autoComplete'];
   textContentType?: TextInputProps['textContentType'];
+  multiline?: boolean;
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
 };
 
 export function LabeledTextInput({
@@ -36,6 +39,9 @@ export function LabeledTextInput({
   secureTextEntry,
   autoComplete,
   textContentType,
+  multiline = false,
+  returnKeyType,
+  onSubmitEditing,
 }: Props) {
   return (
     <View className="gap-1.5">
@@ -43,7 +49,11 @@ export function LabeledTextInput({
         {label}
         {required ? <Text className="text-brand-600">*</Text> : null}
       </Text>
-      <View className="min-h-[52px] flex-row items-center rounded-xl border border-neutral-200 bg-white px-3">
+      <View
+        className={`flex-row rounded-xl border border-neutral-200 bg-white px-3 ${
+          multiline ? 'min-h-[96px] items-start py-3' : 'min-h-[52px] items-center'
+        }`}
+      >
         {leftAccessory}
         <TextInput
           accessibilityLabel={accessibilityLabel ?? label}
@@ -57,7 +67,12 @@ export function LabeledTextInput({
           secureTextEntry={secureTextEntry}
           autoComplete={autoComplete}
           textContentType={textContentType}
-          className="native:text-[16px] flex-1 py-3.5 text-base text-neutral-900"
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          style={{ flex: 1, minWidth: 0 }}
+          className={`native:text-[16px] text-base text-neutral-900 ${multiline ? 'py-0' : 'py-3.5'}`}
         />
         {rightAccessory}
       </View>

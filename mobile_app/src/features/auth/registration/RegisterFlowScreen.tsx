@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { CreditCard, Hash, ChevronDown, Phone } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CreditCard, Hash, Phone } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { useHardwareBackHandler } from '@/features/auth/hooks/useHardwareBackHandler';
@@ -58,11 +58,14 @@ export default function RegisterFlowScreen() {
   const lga = useRegistrationDraftStore((s) => s.lga);
   const homeAddress = useRegistrationDraftStore((s) => s.homeAddress);
   const occupationId = useRegistrationDraftStore((s) => s.occupationId);
+  const savedPassword = useRegistrationDraftStore((s) => s.password);
 
   const [otpInput, setOtpInput] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [resendSec, setResendSec] = useState(0);
+
+  const reviewPassword = savedPassword || password;
 
   const stepMeta = REGISTRATION_STEPS[stepIndex] ?? REGISTRATION_STEPS[0];
   const { replay } = useRegistrationStepVoice(stepMeta.voiceLine, hydrated);
@@ -70,6 +73,16 @@ export default function RegisterFlowScreen() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  const prevStepId = useRef(stepMeta.id);
+  useEffect(() => {
+    const enteredPasswordStep = stepMeta.id === 'password' && prevStepId.current !== 'password';
+    if (enteredPasswordStep && savedPassword) {
+      setPassword(savedPassword);
+      setPasswordConfirm(savedPassword);
+    }
+    prevStepId.current = stepMeta.id;
+  }, [stepMeta.id, savedPassword]);
 
   const creatingIdx = registrationStepIndex('creating');
   const walletIdx = registrationStepIndex('wallet');
@@ -218,6 +231,10 @@ export default function RegisterFlowScreen() {
         setOtpInput('');
         goNext();
         break;
+      case 'password':
+        updateDraft({ password });
+        goNext();
+        break;
       case 'face_intro':
         goNext();
         break;
@@ -238,10 +255,10 @@ export default function RegisterFlowScreen() {
       default:
         goNext();
     }
-  }, [stepMeta.id, goNext, updateDraft, router, clearDraft, setPassword, setPasswordConfirm]);
+  }, [stepMeta.id, goNext, updateDraft, router, clearDraft, password, setPassword, setPasswordConfirm]);
 
   const showBack = stepMeta.id !== 'creating' && stepMeta.id !== 'success';
-  const scrollable = stepMeta.id !== 'face_scan' && stepMeta.id !== 'creating';
+  const scrollable = stepMeta.id !== 'face_scan';
 
   if (!hydrated) {
     return (
@@ -315,10 +332,8 @@ export default function RegisterFlowScreen() {
               keyboardType="phone-pad"
               autoCapitalize="none"
               leftAccessory={
-                <View className="mr-2 flex-row items-center gap-1 border-r border-neutral-200 pr-2">
-                  <Text className="text-sm font-semibold text-neutral-700">NG</Text>
-                  <ChevronDown size={16} color="#737373" />
-                  <Text className="text-sm text-neutral-500">+234</Text>
+                <View className="mr-2 shrink-0 flex-row items-center border-r border-neutral-200 pr-2">
+                  <Text className="text-sm font-semibold text-neutral-700">+234</Text>
                 </View>
               }
               rightAccessory={<Phone size={20} color="#a3a3a3" style={{ marginLeft: 4 }} />}
@@ -397,8 +412,10 @@ export default function RegisterFlowScreen() {
             value={nin}
             onChangeText={(t) => updateDraft({ nin: t.replace(/\D/g, '').slice(0, 11) })}
             placeholder="Enter your NIN"
-            keyboardType="numeric"
+            keyboardType="number-pad"
             autoCapitalize="none"
+            autoComplete="off"
+            textContentType="none"
             maxLength={11}
             rightAccessory={<Hash size={20} color="#a3a3a3" style={{ marginLeft: 4 }} />}
             accessibilityLabel="National Identification Number"
@@ -441,6 +458,7 @@ export default function RegisterFlowScreen() {
               onChangeText={(t) => updateDraft({ homeAddress: t })}
               placeholder="Street, area, and nearby landmark"
               autoCapitalize="sentences"
+              multiline
               accessibilityLabel="Home address"
             />
           </View>
@@ -453,8 +471,10 @@ export default function RegisterFlowScreen() {
             value={bvn}
             onChangeText={(t) => updateDraft({ bvn: t.replace(/\D/g, '').slice(0, 11) })}
             placeholder="Enter your BVN"
-            keyboardType="numeric"
+            keyboardType="number-pad"
             autoCapitalize="none"
+            autoComplete="off"
+            textContentType="none"
             maxLength={11}
             rightAccessory={<CreditCard size={20} color="#a3a3a3" style={{ marginLeft: 4 }} />}
             accessibilityLabel="Bank Verification Number"
@@ -476,7 +496,7 @@ export default function RegisterFlowScreen() {
             <ReviewRow label="Phone" value={`+234 ${formatPhoneDisplay(phoneDigits)}`} onEdit={() => goToStep(registrationStepIndex('phone'))} />
             <ReviewRow
               label="Password"
-              value={password.length >= 8 ? '••••••••' : '—'}
+              value={reviewPassword.length >= 8 ? '••••••••' : '—'}
               onEdit={() => goToStep(registrationStepIndex('password'))}
             />
             <ReviewRow label="NIN" value={nin.replace(/\D/g, '')} onEdit={() => goToStep(registrationStepIndex('nin'))} />
@@ -534,7 +554,7 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string; onE
     <View className="flex-row items-start justify-between gap-3 border-b border-neutral-100 py-4">
       <View className="flex-1">
         <Text className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</Text>
-        <Text className="mt-1 text-base text-neutral-900">{value}</Text>
+        <Text className="mt-1 text-base leading-snug text-neutral-900">{value}</Text>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${label}`} onPress={onEdit} hitSlop={8} className="py-1">
         <Text className="text-sm font-semibold text-brand-700">Edit</Text>

@@ -16,6 +16,7 @@ type PersistedDraft = {
   lga: string;
   homeAddress: string;
   occupationId: string | null;
+  password: string;
   otpVerified: boolean;
   faceDone: boolean;
 };
@@ -41,6 +42,7 @@ const defaultPersist: PersistedDraft = {
   lga: '',
   homeAddress: '',
   occupationId: null,
+  password: '',
   otpVerified: false,
   faceDone: false,
 };
@@ -59,6 +61,7 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
     lga: s.lga,
     homeAddress: s.homeAddress,
     occupationId: s.occupationId,
+    password: s.password,
     otpVerified: s.otpVerified,
     faceDone: s.faceDone,
   };
@@ -117,6 +120,7 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
       const lga = typeof parsed.lga === 'string' ? parsed.lga : '';
       const homeAddress = typeof parsed.homeAddress === 'string' ? parsed.homeAddress : '';
       const bvn = typeof parsed.bvn === 'string' ? parsed.bvn : '';
+      const password = typeof parsed.password === 'string' ? parsed.password : '';
       set({
         ...defaultPersist,
         ...rest,
@@ -125,6 +129,7 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
         lga,
         homeAddress,
         bvn,
+        password,
         hydrated: true,
       });
     } catch {
