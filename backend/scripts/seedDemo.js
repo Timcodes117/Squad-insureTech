@@ -205,6 +205,7 @@ function printSummary({ pool, hospital, users }) {
     line('email', u.user.email);
     line('password', PASSWORD);
     line('phone', u.user.phone);
+    line('membershipNumber', u.user.membershipNumber);
     line('virtualAccountNumber', u.user.virtualAccountNumber);
     line('weeklyPremium', naira(u.user.weeklyPremium));
     line('isActive', String(u.user.isActive));

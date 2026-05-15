@@ -1,5 +1,6 @@
 'use strict';
 
+const QRCode = require('qrcode');
 const logger = require('../config/logger');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
@@ -7,6 +8,7 @@ const Wallet = require('../models/Wallet');
 const Claim = require('../models/Claim');
 const squad = require('../services/squad');
 const { notifyUser } = require('../services/notification');
+const { generateMembershipNumber } = require('../models/User');
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
 
@@ -261,6 +263,50 @@ const withdraw = asyncHandler(async (req, res) => {
   });
 });
 
+// Returns the user's membership number + a QR code as a PNG data URL.
+// Generates the membership number lazily for legacy rows that pre-date the
+// pre-save hook.
+const getMembershipCard = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  if (!user.membershipNumber) {
+    user.membershipNumber = generateMembershipNumber();
+    try {
+      await user.save();
+    } catch (err) {
+      // Unique-collision retry (one shot is enough — 30 bits of entropy).
+      if (err.code === 11000) {
+        user.membershipNumber = generateMembershipNumber();
+        await user.save();
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  const payload = user.membershipNumber;
+  let qrCodeDataUrl = null;
+  try {
+    qrCodeDataUrl = await QRCode.toDataURL(payload, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 320,
+    });
+  } catch (err) {
+    logger.warn({ err }, 'card: failed to generate QR — returning payload only');
+  }
+
+  res.json({
+    success: true,
+    data: {
+      membershipNumber: user.membershipNumber,
+      fullName: user.fullName,
+      qrPayload: payload,
+      qrCodeDataUrl,
+    },
+  });
+});
+
 module.exports = {
   getWallet,
   listTransactions,
@@ -268,4 +314,5 @@ module.exports = {
   retryVirtualAccount,
   getWithdrawable,
   withdraw,
+  getMembershipCard,
 };

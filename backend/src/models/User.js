@@ -2,8 +2,18 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { customAlphabet } = require('nanoid');
 
 const NIGERIAN_PHONE_REGEX = /^(\+234|0)[789][01]\d{8}$/;
+
+// Crockford base32 — no I, L, O, U so the code stays unambiguous if a user has
+// to read it aloud as a fallback when their QR can't be scanned.
+const membershipNanoid = customAlphabet('0123456789ABCDEFGHJKMNPQRSTVWXYZ', 9);
+const MEMBERSHIP_PREFIX = 'BH-';
+
+function generateMembershipNumber() {
+  return `${MEMBERSHIP_PREFIX}${membershipNanoid()}`;
+}
 
 const userSchema = new mongoose.Schema(
   {
@@ -95,6 +105,16 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    // Customer-facing membership number, e.g. BH-AB23JKL5M. Printed on physical
+    // cards and encoded into the user's QR code. Generated at registration; if
+    // missing on an existing user (legacy row), the /users/me/card endpoint
+    // backfills it on first read.
+    membershipNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     virtualAccountNumber: {
       type: String,
       sparse: true,
@@ -165,6 +185,10 @@ userSchema.pre('save', async function preSave(next) {
       this.coverageResetAt = new Date(created.getTime() + 30 * 24 * 60 * 60 * 1000);
     }
 
+    if (this.isNew && !this.membershipNumber) {
+      this.membershipNumber = generateMembershipNumber();
+    }
+
     if (!this.isModified('passwordHash')) {
       return next();
     }
@@ -195,3 +219,4 @@ const User = mongoose.model('User', userSchema);
 
 module.exports = User;
 module.exports.NIGERIAN_PHONE_REGEX = NIGERIAN_PHONE_REGEX;
+module.exports.generateMembershipNumber = generateMembershipNumber;

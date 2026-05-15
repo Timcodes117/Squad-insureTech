@@ -239,6 +239,23 @@ const schemas = {
       },
     },
   },
+  MembershipCard: {
+    type: 'object',
+    properties: {
+      membershipNumber: { type: 'string', example: 'BH-AB23JKL5M' },
+      fullName: { type: 'string', example: 'Adaeze Mature' },
+      qrPayload: {
+        type: 'string',
+        description: 'String encoded inside the QR — currently the membership number itself.',
+        example: 'BH-AB23JKL5M',
+      },
+      qrCodeDataUrl: {
+        type: 'string',
+        description: 'PNG data URL (base64) — render directly in <img src>.',
+        example: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+      },
+    },
+  },
   FaceVerifyRequest: {
     type: 'object',
     required: ['phone', 'image'],
@@ -613,6 +630,34 @@ const paths = {
       responses: { 200: { $ref: '#/components/responses/Success200' } },
     },
   },
+  '/users/me/card': {
+    get: {
+      tags: ['Users'],
+      summary: 'Membership card (number + QR code data URL)',
+      description:
+        'Returns the user\'s BH-XXXXXXXXX membership number plus a QR code as a PNG data URL. Use for the in-app digital card and the future physical card print. Membership number is generated lazily on first read for legacy rows.',
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: 'Card payload',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  membershipNumber: 'BH-AB23JKL5M',
+                  fullName: 'Adaeze Mature',
+                  qrPayload: 'BH-AB23JKL5M',
+                  qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   '/users/me/transactions': {
     get: {
       tags: ['Users'],
@@ -829,18 +874,29 @@ const paths = {
   '/hospital/users/lookup': {
     get: {
       tags: ['Hospitals'],
-      summary: 'Look up patient by phone + issue 4h preAuth code',
+      summary: 'Look up patient by phone OR membership number + issue 4h preAuth code',
+      description:
+        'Provide either `phone` (typed in by the patient) OR `membership` (scanned from the patient\'s QR card). Both resolve the same record. Lookup also issues a 4-hour single-use preAuth code, sent to the patient via SMS + in-app notification.',
       security: [{ hospitalApiKey: [] }],
       parameters: [
         {
           name: 'phone',
           in: 'query',
-          required: true,
+          required: false,
           schema: { type: 'string', pattern: '^(\\+234|0)[789][01]\\d{8}$' },
+          example: '08099000010',
+        },
+        {
+          name: 'membership',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', pattern: '^BH-[0-9A-Z]{9}$' },
+          example: 'BH-AB23JKL5M',
         },
       ],
       responses: {
         200: { $ref: '#/components/responses/Success200' },
+        400: { $ref: '#/components/responses/Error400' },
         404: { $ref: '#/components/responses/Error404' },
       },
     },

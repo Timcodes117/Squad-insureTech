@@ -56,10 +56,18 @@ const registerHospital = asyncHandler(async (req, res) => {
 });
 
 const lookupUser = asyncHandler(async (req, res) => {
-  const { phone } = req.query;
+  const { phone, membership } = req.query;
 
-  const user = await User.findOne({ phone });
-  if (!user) throw AppError.notFound('No BetaHealth user with that phone');
+  // Either phone or membership number (from card QR) resolves the patient.
+  const query = membership ? { membershipNumber: membership } : { phone };
+  const user = await User.findOne(query);
+  if (!user) {
+    throw AppError.notFound(
+      membership
+        ? 'No BetaHealth user with that membership number'
+        : 'No BetaHealth user with that phone'
+    );
+  }
 
   // The pre-auth code is the phishing-resistance gate: the user reads it aloud
   // and the hospital must include it when submitting the claim. Without this a
@@ -82,6 +90,7 @@ const lookupUser = asyncHandler(async (req, res) => {
     data: {
       fullName: user.fullName,
       phone: user.phone,
+      membershipNumber: user.membershipNumber || null,
       isActive: user.isActive,
       coverageRemaining: user.coverageRemaining,
       coverageLimit: user.coverageLimit,

@@ -17,7 +17,8 @@
     { "key": "claimId", "value": "" },
     { "key": "preAuthCode", "value": "" },
     { "key": "faceToken", "value": "" },
-    { "key": "otpCode", "value": "" }
+    { "key": "otpCode", "value": "" },
+    { "key": "membershipNumber", "value": "" }
   ],
   "item": [
     {
@@ -140,6 +141,28 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
             "url": { "raw": "{{baseUrl}}/users/me/wallet", "host": ["{{baseUrl}}"], "path": ["users", "me", "wallet"] }
+          }
+        },
+        {
+          "name": "GET /users/me/card",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.membershipNumber) {",
+                  "  pm.collectionVariables.set('membershipNumber', r.data.membershipNumber);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{baseUrl}}/users/me/card", "host": ["{{baseUrl}}"], "path": ["users", "me", "card"] },
+            "description": "Returns membership number (BH-XXXXXXXXX) + QR code as a PNG data URL. Render qrCodeDataUrl directly in an <img src>. Use the membership number for the future physical card and as an alternative lookup key for hospitals."
           }
         },
         {
@@ -324,7 +347,34 @@
           }
         },
         {
-          "name": "GET /hospital/users/lookup",
+          "name": "GET /hospital/users/lookup (by phone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.success && r.data && r.data.preAuthCode) {",
+                  "  pm.collectionVariables.set('preAuthCode', r.data.preAuthCode);",
+                  "  if (r.data.membershipNumber) pm.collectionVariables.set('membershipNumber', r.data.membershipNumber);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/hospital/users/lookup?phone={{userPhone}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["hospital", "users", "lookup"],
+              "query": [{ "key": "phone", "value": "{{userPhone}}" }]
+            }
+          }
+        },
+        {
+          "name": "GET /hospital/users/lookup (by membership / QR scan)",
           "event": [
             {
               "listen": "test",
@@ -342,11 +392,12 @@
             "method": "GET",
             "header": [{ "key": "x-hospital-api-key", "value": "{{hospitalApiKey}}" }],
             "url": {
-              "raw": "{{baseUrl}}/hospital/users/lookup?phone={{userPhone}}",
+              "raw": "{{baseUrl}}/hospital/users/lookup?membership={{membershipNumber}}",
               "host": ["{{baseUrl}}"],
               "path": ["hospital", "users", "lookup"],
-              "query": [{ "key": "phone", "value": "{{userPhone}}" }]
-            }
+              "query": [{ "key": "membership", "value": "{{membershipNumber}}" }]
+            },
+            "description": "Hospital scans the patient's card QR (BH-XXXXXXXXX) and looks them up. Same response as lookup-by-phone, including a fresh preAuth code."
           }
         },
         {

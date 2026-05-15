@@ -15,9 +15,13 @@ const registerBody = Joi.object({
   accountNumber: Joi.string().length(10).pattern(/^\d+$/).required(),
 });
 
+// Lookup by either phone OR membership number (BH-XXXXXXXXX from the card QR).
 const userLookupQuery = Joi.object({
-  phone: Joi.string().pattern(NIGERIAN_PHONE_REGEX).required(),
-});
+  phone: Joi.string().pattern(NIGERIAN_PHONE_REGEX),
+  membership: Joi.string().pattern(/^BH-[0-9A-Z]{9}$/).messages({
+    'string.pattern.base': 'membership must look like BH-XXXXXXXXX (Crockford base32, uppercase)',
+  }),
+}).or('phone', 'membership');
 
 const submitClaimBody = Joi.object({
   phone: Joi.string().pattern(NIGERIAN_PHONE_REGEX).required(),
