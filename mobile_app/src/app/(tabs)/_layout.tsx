@@ -1,11 +1,15 @@
 import { Tabs } from 'expo-router';
 import { Home, Shield, User, Wallet } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const TAB_ACTIVE = '#2563eb';
 const TAB_INACTIVE = '#a3a3a3';
 const ICON = 20;
 
 export default function TabsGroupLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 10);
+
   return (
     <Tabs
       screenOptions={{
@@ -13,11 +17,11 @@ export default function TabsGroupLayout() {
         tabBarActiveTintColor: TAB_ACTIVE,
         tabBarInactiveTintColor: TAB_INACTIVE,
         tabBarStyle: {
-          borderTopColor: '#e5e5e5',
+          borderTopColor: '#E8E6EF',
           backgroundColor: '#ffffff',
-          height: 58,
-          paddingBottom: 6,
-          paddingTop: 6,
+          paddingTop: 8,
+          paddingBottom: bottomPad,
+          minHeight: 56 + bottomPad,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
         tabBarIconStyle: { marginBottom: 0 },

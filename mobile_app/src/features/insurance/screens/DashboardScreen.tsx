@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { Bell, Eye, EyeOff } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Bell, QrCode } from 'lucide-react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Image,
   NativeScrollEvent,
@@ -12,21 +12,25 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { HOME_CAROUSEL_SLIDES } from '@/features/insurance/constants/homeCarousel';
+import { FirstPremiumWarningBanner } from '@/features/insurance/components/FirstPremiumWarningBanner';
+import { HomeQuickActions } from '@/features/insurance/components/HomeQuickActions';
+import { buildHomeInfoSlides } from '@/features/insurance/constants/homeInfoSlides';
 import {
   MOCK_DASHBOARD,
   mockStatusDetail,
   mockStatusHeadline,
 } from '@/features/insurance/constants/mockDashboard';
 import { MOCK_LEDGER } from '@/features/transactions/constants/mockLedger';
+import { LedgerActivityRow } from '@/features/wallet/components/LedgerActivityRow';
+import { WalletBalanceCard } from '@/features/wallet/components/WalletBalanceCard';
 import { MOCK_WALLET } from '@/features/wallet/constants/mockWallet';
-import { Card } from '@/shared/ui/Card';
+import { MemberQrModal } from '@/features/profile/components/MemberQrModal';
 import { formatNaira } from '@/shared/format/naira';
 import { Text } from '@/shared/typography/Text';
 
 const AVATAR = require('../../../../assets/woman.jpg');
-const CAROUSEL_INTERVAL_MS = 5200;
 const MOCK_FIRST_NAME = 'Aisha';
+const SWIPE_PAGES = 2;
 
 function maskBalance(): string {
   return '₦ •••••••';
@@ -36,163 +40,199 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const [balanceVisible, setBalanceVisible] = useState(true);
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const carouselRef = useRef<ScrollView | null>(null);
-  const slideCount = HOME_CAROUSEL_SLIDES.length;
+  const [pagerIndex, setPagerIndex] = useState(0);
+  const [infoIndex, setInfoIndex] = useState(0);
+  const [memberQrOpen, setMemberQrOpen] = useState(false);
+  const pagerRef = useRef<ScrollView | null>(null);
+  const infoRef = useRef<ScrollView | null>(null);
   const slideWidth = windowWidth;
 
   const { coverStatus, coverageRemainingNaira, coverageCapNaira, cooldownHoursLeft, planLabel, resetHint } = MOCK_DASHBOARD;
   const used = Math.max(0, coverageCapNaira - coverageRemainingNaira);
   const pct = coverageCapNaira > 0 ? Math.min(100, Math.round((used / coverageCapNaira) * 100)) : 0;
 
+  const infoSlides = useMemo(
+    () =>
+      buildHomeInfoSlides({
+        coverageRemainingNaira,
+        coverageCapNaira,
+        planLabel,
+      }),
+    [coverageRemainingNaira, coverageCapNaira, planLabel],
+  );
+  const infoCount = infoSlides.length;
+
   const recent = MOCK_LEDGER.slice(0, 5);
   const balance = MOCK_WALLET.balanceNaira;
 
-  useEffect(() => {
-    if (slideWidth <= 0 || slideCount === 0) {
-      return;
-    }
-    const id = setInterval(() => {
-      setCarouselIndex((prev) => {
-        const next = (prev + 1) % slideCount;
-        carouselRef.current?.scrollTo({ x: next * slideWidth, animated: true });
-        return next;
-      });
-    }, CAROUSEL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [slideCount, slideWidth]);
-
-  const onCarouselScrollEnd = useCallback(
+  const onPagerScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
       const idx = Math.round(x / slideWidth);
-      setCarouselIndex(Math.max(0, Math.min(slideCount - 1, idx)));
+      setPagerIndex(Math.max(0, Math.min(SWIPE_PAGES - 1, idx)));
     },
-    [slideWidth, slideCount],
+    [slideWidth],
+  );
+
+  const onInfoScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x;
+      const idx = Math.round(x / slideWidth);
+      setInfoIndex(Math.max(0, Math.min(infoCount - 1, idx)));
+    },
+    [slideWidth, infoCount],
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-neutral-50" edges={['top']}>
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+      <ScrollView className="flex-1 bg-white" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
         {/* Header */}
-        <View className="flex-row items-center justify-between px-5 pt-3 pb-2">
+        <View className="flex-row items-center justify-between px-5 pt-8 pb-2">
           <View className="flex-row items-center gap-3">
-            <Image source={AVATAR} className="h-11 w-11 rounded-full border border-neutral-200 bg-white" accessibilityIgnoresInvertColors />
+            <Image source={AVATAR} className="h-11 w-11 rounded-full bg-neutral-100" accessibilityIgnoresInvertColors />
             <View>
               <Text className="text-sm text-neutral-500">Welcome back</Text>
               <Text className="text-lg font-bold text-neutral-900">Hi {MOCK_FIRST_NAME}</Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-            hitSlop={12}
-            onPress={() => router.push('/(tabs)/notifications')}
-            className="h-11 w-11 items-center justify-center rounded-full bg-white border border-neutral-200 active:bg-neutral-100"
-          >
-            <Bell size={22} color="#2563eb" />
-          </Pressable>
+          <View className="flex-row items-center gap-1">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show my member QR code"
+              hitSlop={12}
+              onPress={() => setMemberQrOpen(true)}
+              className="h-11 w-11 items-center justify-center rounded-full active:bg-neutral-100"
+            >
+              <QrCode size={22} color="#2563eb" />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              hitSlop={12}
+              onPress={() => router.push('/(tabs)/notifications')}
+              className="h-11 w-11 items-center justify-center rounded-full active:bg-neutral-100"
+            >
+              <Bell size={22} color="#2563eb" />
+            </Pressable>
+          </View>
         </View>
 
-        {/* Wallet card — fintech balance */}
-        <View className="mx-5 mt-2 rounded-3xl bg-white px-6 py-8 shadow-sm shadow-black/5 border border-neutral-100">
-          <Text className="text-center text-sm font-medium text-neutral-500">Wallet balance</Text>
-          <Text className="mt-2 text-center text-4xl font-black tracking-tight text-neutral-900">
-            {balanceVisible ? formatNaira(balance) : maskBalance()}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={balanceVisible ? 'Hide balance' : 'Show balance'}
-            onPress={() => setBalanceVisible((v) => !v)}
-            className="mt-4 flex-row items-center justify-center gap-2 self-center rounded-full bg-brand-50 px-4 py-2 active:opacity-80"
-          >
-            {balanceVisible ? <EyeOff size={18} color="#1d4ed8" /> : <Eye size={18} color="#1d4ed8" />}
-            <Text className="text-sm font-semibold text-brand-800">{balanceVisible ? 'Hide balance' : 'Show balance'}</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/(tabs)/wallet')} className="mt-5 self-center active:opacity-70">
-            <Text className="text-sm font-semibold text-brand-700">Fund wallet</Text>
-          </Pressable>
-        </View>
-
-        {/* Carousel */}
-        <View className="mt-6">
+        {/* Swipe: wallet | cover (manual only) */}
+        <View className="mt-2">
           <ScrollView
-            ref={carouselRef}
+            ref={pagerRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onCarouselScrollEnd}
+            onMomentumScrollEnd={onPagerScrollEnd}
             decelerationRate="fast"
           >
-            {HOME_CAROUSEL_SLIDES.map((slide) => (
+            {/* Wallet */}
+            <View style={{ width: slideWidth }} className="px-5 pt-2">
+              <WalletBalanceCard
+                variant="home"
+                balanceNaira={balance}
+                balanceVisible={balanceVisible}
+                onToggleBalance={() => setBalanceVisible((v) => !v)}
+                onFundPress={() => router.push('/(tabs)/wallet')}
+                onWithdrawPress={() => router.push('/(tabs)/wallet')}
+              />
+            </View>
+
+            {/* Cover */}
+            <View style={{ width: slideWidth }} className="px-5 pt-2">
+              <View className="rounded-3xl bg-brand-50/80 px-5 py-8">
+                <Text className="text-center text-sm font-medium text-brand-900/80">Cover balance</Text>
+                <Text className="mt-2 text-center text-4xl font-black tracking-tight text-neutral-900">
+                  {balanceVisible ? formatNaira(coverageRemainingNaira) : maskBalance()}
+                </Text>
+                <Text className="mt-2 text-center text-xs text-neutral-600">
+                  of {formatNaira(coverageCapNaira)} monthly hospital help · {planLabel}
+                </Text>
+                <View className="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-white/90">
+                  <View className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
+                </View>
+                <Text className="mt-4 text-center text-xs font-bold uppercase tracking-wide text-brand-800">
+                  {mockStatusHeadline(coverStatus)}
+                </Text>
+                {/* <Text className="mt-2 text-center text-sm leading-relaxed text-neutral-700">
+                  {mockStatusDetail(coverStatus, cooldownHoursLeft)}
+                </Text> */}
+                <Text className="mt-3 text-center text-[11px] leading-snug text-neutral-500">{resetHint}</Text>
+              </View>
+            </View>
+          </ScrollView>
+          <View className="mt-3 flex-row items-center justify-center gap-2">
+            {Array.from({ length: SWIPE_PAGES }).map((_, i) => (
+              <View key={i} className={`h-2 rounded-full ${i === pagerIndex ? 'w-6 bg-brand-600' : 'w-2 bg-neutral-300'}`} />
+            ))}
+          </View>
+        </View>
+
+        <HomeQuickActions />
+        <FirstPremiumWarningBanner />
+
+        {/* Tips & rules — manual swipe */}
+        <View className="mt-8">
+          <ScrollView
+            ref={infoRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onInfoScrollEnd}
+            decelerationRate="fast"
+          >
+            {infoSlides.map((slide) => (
               <View key={slide.id} style={{ width: slideWidth }} className="px-5">
-                <Card className="min-h-[148px] rounded-2xl border border-neutral-200 bg-white p-5">
-                  <Text className="text-base font-bold text-neutral-900">{slide.title}</Text>
-                  <Text className="mt-2 text-sm leading-relaxed text-neutral-600">{slide.body}</Text>
-                  <Text className="mt-3 text-xs font-medium text-brand-700">{slide.foot}</Text>
-                </Card>
+                <View
+                  // className={
+                  //   slide.variant === 'brand'
+                  //     ? 'rounded-2xl border border-brand-200 bg-brand-50/80 px-5 py-5'
+                  //     : 'rounded-2xl border border-neutral-200 bg-white px-5 py-5'
+                  // }
+                >
+                  <Image source={AVATAR} className="h-40 w-full rounded-2xl bg-neutral-100" accessibilityIgnoresInvertColors />
+                  <Text className="text-base font-bold text-neutral-900 mt-5">{slide.title}</Text>
+                  <Text className="mt-1 text-sm leading-relaxed text-neutral-600">{slide.body}</Text>
+                  <Text
+                    className={`mt-3 text-xs font-medium ${slide.variant === 'brand' ? 'text-brand-800' : 'text-neutral-500'}`}
+                  >
+                    {slide.foot}
+                  </Text>
+                </View>
               </View>
             ))}
           </ScrollView>
-          <View className="mt-3 flex-row items-center justify-center gap-2">
-            {HOME_CAROUSEL_SLIDES.map((s, i) => (
-              <View
-                key={s.id}
-                className={`h-2 rounded-full ${i === carouselIndex ? 'w-6 bg-brand-600' : 'w-2 bg-neutral-300'}`}
-              />
+          <View className="mt-3 flex-row flex-wrap items-center justify-center gap-2">
+            {infoSlides.map((s, i) => (
+              <View key={s.id} className={`h-2 rounded-full ${i === infoIndex ? 'w-6 bg-brand-600' : 'w-2 bg-neutral-300'}`} />
             ))}
           </View>
         </View>
 
-        {/* Cover strip (compact) */}
-        <View className="mx-5 mt-6 rounded-2xl border border-brand-100 bg-brand-50/90 p-4">
-          <Text className="text-xs font-bold uppercase tracking-wide text-brand-800">{mockStatusHeadline(coverStatus)}</Text>
-          <Text className="mt-1 text-sm leading-relaxed text-neutral-700">{mockStatusDetail(coverStatus, cooldownHoursLeft)}</Text>
-          <View className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white">
-            <View className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
-          </View>
-          <Text className="mt-2 text-xs text-neutral-500">
-            {formatNaira(coverageRemainingNaira)} left of {formatNaira(coverageCapNaira)} · {planLabel}
-          </Text>
-          <Text className="mt-1 text-[11px] leading-snug text-neutral-400">{resetHint}</Text>
-        </View>
-
         {/* Recent activity */}
-        <View className="mt-8 px-5">
+        <View className="mt-10 px-5">
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-lg font-bold text-neutral-900">Recent activity</Text>
             <Pressable onPress={() => router.push('/(tabs)/transactions')} hitSlop={8}>
               <Text className="text-sm font-semibold text-brand-700">View all</Text>
             </Pressable>
           </View>
-          <View className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
-            {recent.map((row, idx) => {
-              const sign = row.type === 'credit' ? '+' : '−';
-              const amtColor = row.type === 'credit' ? 'text-brand-700' : 'text-neutral-900';
-              const isLast = idx === recent.length - 1;
-              return (
-                <Pressable
-                  key={row.id}
-                  onPress={() => router.push('/(tabs)/transactions')}
-                  className={`flex-row items-center justify-between px-4 py-3.5 active:bg-neutral-50 ${!isLast ? 'border-b border-neutral-100' : ''}`}
-                >
-                  <View className="mr-3 flex-1">
-                    <Text className="text-sm font-semibold text-neutral-900">{row.title}</Text>
-                    <Text className="mt-0.5 text-xs text-neutral-500">{row.dateLabel}</Text>
-                  </View>
-                  <View className="items-end">
-                    <Text className={`text-sm font-bold ${amtColor}`}>
-                      {sign}
-                      {formatNaira(row.amountNaira)}
-                    </Text>
-                    <Text className="mt-0.5 text-[10px] text-neutral-400">Bal {formatNaira(row.balanceAfterNaira)}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+          <View>
+            {recent.map((row, idx) => (
+              <LedgerActivityRow
+                key={row.id}
+                item={row}
+                showBalanceAfter
+                bordered={idx < recent.length - 1}
+                onPress={() => router.push('/(tabs)/transactions')}
+              />
+            ))}
           </View>
         </View>
       </ScrollView>
+
+      <MemberQrModal visible={memberQrOpen} onClose={() => setMemberQrOpen(false)} />
     </SafeAreaView>
   );
 }

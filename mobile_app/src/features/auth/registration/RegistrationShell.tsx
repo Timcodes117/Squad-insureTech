@@ -82,10 +82,12 @@ export function RegistrationShell({
             accessibilityRole="progressbar"
             accessibilityLabel="Registration progress"
             accessibilityValue={{ min: 0, max: totalSteps, now: Math.min(stepIndex + 1, totalSteps) }}
-            className="mb-1 h-2.5 w-full overflow-hidden rounded-full bg-neutral-200"
+            className="h-2.5 w-full overflow-hidden rounded-full bg-neutral-200"
           >
             <View className="h-full rounded-full bg-brand-600" style={{ width: `${progress * 100}%` }} />
           </View>
+
+          <View className="mb-6" />
 
           {body}
 

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { Hash, ChevronDown, Phone } from 'lucide-react-native';
+import { CreditCard, Hash, ChevronDown, Phone } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { useHardwareBackHandler } from '@/features/auth/hooks/useHardwareBackHandler';
 import { Text } from '@/shared/typography/Text';
@@ -11,26 +11,22 @@ import { LabeledTextInput } from './LabeledTextInput';
 import { NameFieldsGroup } from './NameFieldsGroup';
 import { OtpSixInput } from './OtpSixInput';
 import { RadioTileGroup } from './RadioTileGroup';
+import { RegistrationSelect } from './RegistrationSelect';
 import { RegistrationShell } from './RegistrationShell';
 import {
-  AGE_RANGE_OPTIONS,
-  BETAHEALTH_PLANS,
   GENDER_OPTIONS,
   NIGERIAN_STATES,
   OCCUPATION_OPTIONS,
-  PAYMENT_OPTIONS,
   REGISTRATION_STEPS,
   REGISTRATION_TOTAL_STEPS,
-  formatNaira,
-  planById,
-  planForTier,
   registrationStepIndex,
-  tierForOccupationId,
 } from './registrationConstants';
 import { useRegistrationDraftStore } from './registrationDraftStore';
 import { useRegistrationStepVoice } from './useRegistrationStepVoice';
 
 const CONTINUE_ACCENT = '#2563eb';
+
+const STATE_OPTIONS = NIGERIAN_STATES.map((s) => ({ value: s, label: s }));
 
 function formatPhoneDisplay(digits: string) {
   const d = digits.replace(/\D/g, '').slice(0, 11);
@@ -56,18 +52,17 @@ export default function RegisterFlowScreen() {
   const lastName = useRegistrationDraftStore((s) => s.lastName);
   const phoneDigits = useRegistrationDraftStore((s) => s.phoneDigits);
   const nin = useRegistrationDraftStore((s) => s.nin);
-  const ageRange = useRegistrationDraftStore((s) => s.ageRange);
+  const bvn = useRegistrationDraftStore((s) => s.bvn);
   const gender = useRegistrationDraftStore((s) => s.gender);
   const state = useRegistrationDraftStore((s) => s.state);
-  const paymentFrequency = useRegistrationDraftStore((s) => s.paymentFrequency);
+  const lga = useRegistrationDraftStore((s) => s.lga);
+  const homeAddress = useRegistrationDraftStore((s) => s.homeAddress);
   const occupationId = useRegistrationDraftStore((s) => s.occupationId);
-  const planId = useRegistrationDraftStore((s) => s.planId);
 
   const [otpInput, setOtpInput] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [resendSec, setResendSec] = useState(0);
-  const [stateQuery, setStateQuery] = useState('');
 
   const stepMeta = REGISTRATION_STEPS[stepIndex] ?? REGISTRATION_STEPS[0];
   const { replay } = useRegistrationStepVoice(stepMeta.voiceLine, hydrated);
@@ -105,22 +100,20 @@ export default function RegisterFlowScreen() {
     return () => clearInterval(t);
   }, [isOtpStep, resendSec]);
 
-  const filteredStates = useMemo(() => {
-    const q = stateQuery.trim().toLowerCase();
-    if (!q) {
-      return [...NIGERIAN_STATES];
-    }
-    return NIGERIAN_STATES.filter((s) => s.toLowerCase().includes(q));
-  }, [stateQuery]);
-
   const walletNumber = useMemo(() => fakeWalletAccount(phoneDigits), [phoneDigits]);
-
-  const selectedPlan = useMemo(() => planById(planId), [planId]);
 
   const displayFullName = useMemo(
     () => [firstName, middleName, lastName].map((s) => s.trim()).filter(Boolean).join(' '),
     [firstName, middleName, lastName],
   );
+
+  const maskedBvn = useMemo(() => {
+    const d = bvn.replace(/\D/g, '');
+    if (d.length < 4) {
+      return '—';
+    }
+    return `•••• ${d.slice(-4)}`;
+  }, [bvn]);
 
   const goNext = useCallback(() => {
     updateDraft({ stepIndex: Math.min(REGISTRATION_TOTAL_STEPS - 1, stepIndex + 1) });
@@ -174,21 +167,16 @@ export default function RegisterFlowScreen() {
         const n = nin.replace(/\D/g, '');
         return n.length === 11;
       }
-      case 'age_range':
-        return Boolean(ageRange);
       case 'gender':
         return Boolean(gender);
-      case 'state':
-        return Boolean(state);
-      case 'payment_frequency':
-        return paymentFrequency === 'weekly' || paymentFrequency === 'monthly';
+      case 'location':
+        return Boolean(state) && lga.trim().length >= 2 && homeAddress.trim().length >= 5;
+      case 'bvn': {
+        const b = bvn.replace(/\D/g, '');
+        return b.length === 11;
+      }
       case 'occupation':
         return Boolean(occupationId);
-      case 'plan': {
-        const tier = tierForOccupationId(occupationId);
-        const p = planById(planId);
-        return Boolean(tier && p && p.tier === tier);
-      }
       case 'review':
         return true;
       case 'creating':
@@ -209,12 +197,12 @@ export default function RegisterFlowScreen() {
     password,
     passwordConfirm,
     nin,
-    ageRange,
+    bvn,
     gender,
     state,
-    paymentFrequency,
+    lga,
+    homeAddress,
     occupationId,
-    planId,
   ]);
 
   const onPrimaryPress = useCallback(() => {
@@ -417,15 +405,6 @@ export default function RegisterFlowScreen() {
           />
         ) : null}
 
-        {stepMeta.id === 'age_range' ? (
-          <RadioTileGroup
-            accessibilityLabel="Age range"
-            options={AGE_RANGE_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
-            value={ageRange}
-            onChange={(id) => updateDraft({ ageRange: id })}
-          />
-        ) : null}
-
         {stepMeta.id === 'gender' ? (
           <RadioTileGroup
             accessibilityLabel="Gender"
@@ -435,41 +414,50 @@ export default function RegisterFlowScreen() {
           />
         ) : null}
 
-        {stepMeta.id === 'state' ? (
-          <View className="gap-3">
-            <LabeledTextInput
-              label="Search state"
-              value={stateQuery}
-              onChangeText={setStateQuery}
-              placeholder="Type to search"
-              autoCapitalize="words"
-              accessibilityLabel="Search Nigerian states"
+        {stepMeta.id === 'location' ? (
+          <View className="gap-5">
+            <RegistrationSelect
+              label="State"
+              required
+              placeholder="Select your state"
+              value={state}
+              options={STATE_OPTIONS}
+              onChange={(v) => updateDraft({ state: v })}
+              accessibilityLabel="State"
             />
-            <ScrollView className="max-h-64" keyboardShouldPersistTaps="handled">
-              {filteredStates.map((st) => {
-                const selected = state === st;
-                return (
-                  <Pressable
-                    key={st}
-                    onPress={() => updateDraft({ state: st })}
-                    className={`border-b border-neutral-100 py-3.5 ${selected ? 'bg-transparent' : 'active:opacity-70'}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                  >
-                    <Text className={`text-base ${selected ? 'font-semibold text-brand-800' : 'text-neutral-900'}`}>{st}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <LabeledTextInput
+              label="Local government area (LGA)"
+              required
+              value={lga}
+              onChangeText={(t) => updateDraft({ lga: t })}
+              placeholder="e.g. Ikeja, Port Harcourt"
+              autoCapitalize="words"
+              accessibilityLabel="Local government area"
+            />
+            <LabeledTextInput
+              label="Home address"
+              required
+              value={homeAddress}
+              onChangeText={(t) => updateDraft({ homeAddress: t })}
+              placeholder="Street, area, and nearby landmark"
+              autoCapitalize="sentences"
+              accessibilityLabel="Home address"
+            />
           </View>
         ) : null}
 
-        {stepMeta.id === 'payment_frequency' ? (
-          <RadioTileGroup
-            accessibilityLabel="Payment frequency"
-            options={PAYMENT_OPTIONS.map((o) => ({ id: o.id, label: o.label, hint: o.hint }))}
-            value={paymentFrequency}
-            onChange={(id) => updateDraft({ paymentFrequency: id as 'weekly' | 'monthly' })}
+        {stepMeta.id === 'bvn' ? (
+          <LabeledTextInput
+            label="BVN (11 digits)"
+            required
+            value={bvn}
+            onChangeText={(t) => updateDraft({ bvn: t.replace(/\D/g, '').slice(0, 11) })}
+            placeholder="Enter your BVN"
+            keyboardType="numeric"
+            autoCapitalize="none"
+            maxLength={11}
+            rightAccessory={<CreditCard size={20} color="#a3a3a3" style={{ marginLeft: 4 }} />}
+            accessibilityLabel="Bank Verification Number"
           />
         ) : null}
 
@@ -482,53 +470,6 @@ export default function RegisterFlowScreen() {
           />
         ) : null}
 
-        {stepMeta.id === 'plan' ? (
-          <View className="gap-4">
-            {(() => {
-              const tier = tierForOccupationId(occupationId);
-              return BETAHEALTH_PLANS.map((plan) => {
-                const matchesJob = tier === plan.tier;
-                const selected = planId === plan.id;
-                return (
-                  <Pressable
-                    key={plan.id}
-                    disabled={!matchesJob}
-                    onPress={() => matchesJob && updateDraft({ planId: plan.id })}
-                    className={`rounded-2xl border-2 px-4 py-4 ${
-                      selected && matchesJob
-                        ? 'border-brand-600 bg-brand-50'
-                        : matchesJob
-                          ? 'border-neutral-200 bg-white active:bg-neutral-50'
-                          : 'border-neutral-100 bg-neutral-50 opacity-60'
-                    }`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: selected && matchesJob, disabled: !matchesJob }}
-                  >
-                    <View className="flex-row items-baseline justify-between gap-2">
-                      <Text className={`text-lg font-bold ${selected && matchesJob ? 'text-brand-900' : 'text-neutral-900'}`}>{plan.name}</Text>
-                      <Text className="text-base font-semibold text-brand-700">{formatNaira(plan.weeklyNaira)}/wk</Text>
-                    </View>
-                    <Text className="mt-1 text-sm text-neutral-600">{plan.audience}</Text>
-                    <Text className="mt-2 text-xs font-medium uppercase tracking-wide text-neutral-400">
-                      {formatNaira(plan.monthlyCapNaira)} monthly cap
-                    </Text>
-                    {!matchesJob ? (
-                      <Text className="mt-2 text-xs text-neutral-500">Based on your work type, your tier is {tier ? planForTier(tier).name : '—'}.</Text>
-                    ) : null}
-                    <View className="mt-3 gap-1.5">
-                      {plan.bullets.map((b) => (
-                        <Text key={b} className="text-sm leading-relaxed text-neutral-600">
-                          • {b}
-                        </Text>
-                      ))}
-                    </View>
-                  </Pressable>
-                );
-              });
-            })()}
-          </View>
-        ) : null}
-
         {stepMeta.id === 'review' ? (
           <View className="gap-3">
             <ReviewRow label="Name" value={displayFullName || '—'} onEdit={() => goToStep(registrationStepIndex('full_name'))} />
@@ -539,23 +480,17 @@ export default function RegisterFlowScreen() {
               onEdit={() => goToStep(registrationStepIndex('password'))}
             />
             <ReviewRow label="NIN" value={nin.replace(/\D/g, '')} onEdit={() => goToStep(registrationStepIndex('nin'))} />
-            <ReviewRow label="Age range" value={ageRange ?? '—'} onEdit={() => goToStep(registrationStepIndex('age_range'))} />
             <ReviewRow label="Gender" value={GENDER_OPTIONS.find((g) => g.id === gender)?.label ?? '—'} onEdit={() => goToStep(registrationStepIndex('gender'))} />
-            <ReviewRow label="State" value={state ?? '—'} onEdit={() => goToStep(registrationStepIndex('state'))} />
             <ReviewRow
-              label="Payments"
-              value={paymentFrequency === 'weekly' ? 'Weekly' : paymentFrequency === 'monthly' ? 'Monthly' : '—'}
-              onEdit={() => goToStep(registrationStepIndex('payment_frequency'))}
+              label="Location"
+              value={[state, lga.trim(), homeAddress.trim()].filter(Boolean).join(' · ') || '—'}
+              onEdit={() => goToStep(registrationStepIndex('location'))}
             />
+            <ReviewRow label="BVN" value={maskedBvn} onEdit={() => goToStep(registrationStepIndex('bvn'))} />
             <ReviewRow
               label="Work type"
               value={OCCUPATION_OPTIONS.find((o) => o.id === occupationId)?.label ?? '—'}
               onEdit={() => goToStep(registrationStepIndex('occupation'))}
-            />
-            <ReviewRow
-              label="Plan"
-              value={selectedPlan ? `${selectedPlan.name} (${formatNaira(selectedPlan.weeklyNaira)}/wk)` : '—'}
-              onEdit={() => goToStep(registrationStepIndex('plan'))}
             />
           </View>
         ) : null}
@@ -564,7 +499,7 @@ export default function RegisterFlowScreen() {
           <View className="items-center py-16">
             <ActivityIndicator size="large" color={CONTINUE_ACCENT} />
             <Text className="mt-6 text-center text-base text-neutral-600">Creating your profile…</Text>
-            <Text className="mt-2 text-center text-sm text-neutral-500">Setting up your BetaHealth wallet and cover profile.</Text>
+            <Text className="mt-2 text-center text-sm text-neutral-500">Setting up your BetaHealth wallet.</Text>
           </View>
         ) : null}
 
@@ -573,22 +508,8 @@ export default function RegisterFlowScreen() {
             <Text className="text-sm font-medium text-neutral-500">BetaHealth virtual account</Text>
             <Text className="text-2xl font-bold tracking-wide text-neutral-900">{walletNumber}</Text>
             <Text className="text-base text-neutral-600">Partner bank (Squad)</Text>
-            <View className="my-2 h-px bg-neutral-100" />
-            <Text className="text-sm text-neutral-600">
-              Plan:{' '}
-              <Text className="font-semibold text-neutral-900">
-                {selectedPlan?.name ?? '—'}
-                {selectedPlan ? ` — ${formatNaira(selectedPlan.weeklyNaira)} weekly` : ''}
-              </Text>
-              {selectedPlan ? (
-                <Text className="text-neutral-600">
-                  {' '}
-                  · {formatNaira(selectedPlan.monthlyCapNaira)} monthly hospital help cap
-                </Text>
-              ) : null}
-            </Text>
             <Text className="text-xs leading-relaxed text-neutral-500">
-              Fund this account from your bank app. Cover turns on after your first successful payment (demo).
+              Fund this account from your bank app. After registration you can choose your health plan and payment schedule from the home screen.
             </Text>
           </View>
         ) : null}
@@ -599,7 +520,7 @@ export default function RegisterFlowScreen() {
               <Text className="text-4xl">✓</Text>
             </View>
             <Text className="text-center text-base leading-relaxed text-neutral-600">
-              Welcome to BetaHealth. Fund your wallet to activate cover—partner hospitals can confirm you before care.
+              Welcome to BetaHealth. Choose your plan and fund your wallet from the home screen when you are ready.
             </Text>
           </View>
         ) : null}

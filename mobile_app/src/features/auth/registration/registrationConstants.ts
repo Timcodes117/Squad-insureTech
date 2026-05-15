@@ -1,3 +1,5 @@
+import { formatNaira } from '@/shared/format/naira';
+
 export const REGISTRATION_STEPS = [
   {
     id: 'full_name',
@@ -50,13 +52,6 @@ export const REGISTRATION_STEPS = [
     voiceLine: 'Please enter your NIN, the eleven digit number on your national ID.',
   },
   {
-    id: 'age_range',
-    progressLabel: 'Age',
-    title: 'Your age range',
-    subtitle: 'Pick the range that fits you best.',
-    voiceLine: 'Which age range are you in?',
-  },
-  {
     id: 'gender',
     progressLabel: 'Gender',
     title: 'How should we refer to you?',
@@ -64,32 +59,25 @@ export const REGISTRATION_STEPS = [
     voiceLine: 'How should we refer to you?',
   },
   {
-    id: 'state',
+    id: 'location',
     progressLabel: 'Location',
-    title: 'State / market area',
-    subtitle: 'Choose your state or main market area. You can add more detail later.',
-    voiceLine: 'Which state or market area are you in?',
+    title: 'Where do you live?',
+    subtitle: 'Your state, local government area, and home address help us place you with nearby partner hospitals.',
+    voiceLine: 'Tell us your state, local government area, and home address.',
   },
   {
-    id: 'payment_frequency',
-    progressLabel: 'Payments',
-    title: 'How do you want to pay?',
-    subtitle: 'A small weekly payment, or a monthly payment—pick what feels easier.',
-    voiceLine: 'Do you want to pay weekly or monthly?',
+    id: 'bvn',
+    progressLabel: 'BVN',
+    title: 'Your BVN',
+    subtitle: 'Your eleven-digit Bank Verification Number links your account for wallet funding and payouts.',
+    voiceLine: 'Please enter your BVN, the eleven digit number from your bank.',
   },
   {
     id: 'occupation',
     progressLabel: 'Work',
     title: 'What kind of work do you do?',
-    subtitle: 'This helps us assign the right weekly amount for your cover tier—same hospital help for everyone.',
+    subtitle: 'This helps us understand your profile. You will choose your health plan after registration.',
     voiceLine: 'Pick the option that best matches your main work.',
-  },
-  {
-    id: 'plan',
-    progressLabel: 'Plan',
-    title: 'Your BetaHealth plan',
-    subtitle: 'Three tiers, same ₦20,000 monthly hospital help. Your job type sets which weekly amount applies.',
-    voiceLine: 'Here is the health cover plan for your work type.',
   },
   {
     id: 'review',
@@ -116,7 +104,7 @@ export const REGISTRATION_STEPS = [
     id: 'success',
     progressLabel: 'Done',
     title: 'You are all set',
-    subtitle: 'Welcome to BetaHealth—weekly micro-cover for everyday hospital bills.',
+    subtitle: 'Welcome to BetaHealth. Choose your plan and fund your wallet from the home screen when you are ready.',
     voiceLine: 'You are all set. Welcome.',
   },
 ] as const;
@@ -130,12 +118,10 @@ export function registrationStepIndex(id: RegistrationStepId): number {
   return i >= 0 ? i : 0;
 }
 
-export const AGE_RANGE_OPTIONS = [
-  { id: '18-25', label: '18–25' },
-  { id: '26-40', label: '26–40' },
-  { id: '41-60', label: '41–60' },
-  { id: '60+', label: '60+' },
-] as const;
+export type PaymentFrequency = 'weekly' | 'monthly';
+
+/** Scaffold: monthly premium = 4 × weekly until billing API defines otherwise. */
+export const WEEKS_PER_MONTHLY_PREMIUM = 4;
 
 export const GENDER_OPTIONS = [
   { id: 'female', label: 'Female' },
@@ -219,7 +205,23 @@ export function planById(id: string | null | undefined): BetaHealthPlan | null {
   return BETAHEALTH_PLANS.find((p) => p.id === id) ?? null;
 }
 
-export { formatNaira } from '@/shared/format/naira';
+export function planPremiumNaira(plan: BetaHealthPlan, frequency: PaymentFrequency | null): number {
+  if (frequency === 'monthly') {
+    return plan.weeklyNaira * WEEKS_PER_MONTHLY_PREMIUM;
+  }
+  return plan.weeklyNaira;
+}
+
+export function planPremiumPeriodLabel(frequency: PaymentFrequency | null): 'week' | 'month' {
+  return frequency === 'monthly' ? 'month' : 'week';
+}
+
+export function formatPlanPremium(plan: BetaHealthPlan, frequency: PaymentFrequency | null): string {
+  const suffix = frequency === 'monthly' ? '/mo' : '/wk';
+  return `${formatNaira(planPremiumNaira(plan, frequency))}${suffix}`;
+}
+
+export { formatNaira };
 
 export const OCCUPATION_OPTIONS = [
   { id: 'office', label: 'Office / desk work', tier: 'low' as const, hint: 'Low risk' },

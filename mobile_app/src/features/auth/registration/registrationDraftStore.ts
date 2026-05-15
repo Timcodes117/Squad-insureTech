@@ -3,10 +3,6 @@ import { create } from 'zustand';
 import { secureStorage } from '@/core/storage/secureStorage';
 import { STORAGE_KEYS } from '@/core/storage/storageKeys';
 
-import { DEFAULT_PLAN_ID, LEGACY_STARTER_PLAN_ID, planById, planForTier, tierForOccupationId } from './registrationConstants';
-
-export type PaymentFrequency = 'weekly' | 'monthly';
-
 type PersistedDraft = {
   stepIndex: number;
   firstName: string;
@@ -14,12 +10,12 @@ type PersistedDraft = {
   lastName: string;
   phoneDigits: string;
   nin: string;
-  ageRange: string | null;
+  bvn: string;
   gender: string | null;
   state: string | null;
-  paymentFrequency: PaymentFrequency | null;
+  lga: string;
+  homeAddress: string;
   occupationId: string | null;
-  planId: string | null;
   otpVerified: boolean;
   faceDone: boolean;
 };
@@ -39,12 +35,12 @@ const defaultPersist: PersistedDraft = {
   lastName: '',
   phoneDigits: '',
   nin: '',
-  ageRange: null,
+  bvn: '',
   gender: null,
   state: null,
-  paymentFrequency: null,
+  lga: '',
+  homeAddress: '',
   occupationId: null,
-  planId: DEFAULT_PLAN_ID,
   otpVerified: false,
   faceDone: false,
 };
@@ -57,12 +53,12 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
     lastName: s.lastName,
     phoneDigits: s.phoneDigits,
     nin: s.nin,
-    ageRange: s.ageRange,
+    bvn: s.bvn,
     gender: s.gender,
     state: s.state,
-    paymentFrequency: s.paymentFrequency,
+    lga: s.lga,
+    homeAddress: s.homeAddress,
     occupationId: s.occupationId,
-    planId: s.planId,
     otpVerified: s.otpVerified,
     faceDone: s.faceDone,
   };
@@ -70,16 +66,6 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
 
 async function writeDraft(p: PersistedDraft) {
   await secureStorage.setItem(STORAGE_KEYS.registrationDraft, JSON.stringify(p));
-}
-
-function migratePlanId(raw: unknown): string {
-  if (raw === LEGACY_STARTER_PLAN_ID) {
-    return DEFAULT_PLAN_ID;
-  }
-  if (typeof raw === 'string' && planById(raw)) {
-    return raw;
-  }
-  return DEFAULT_PLAN_ID;
 }
 
 function migrateLegacyNameFields(parsed: Record<string, unknown>): Pick<PersistedDraft, 'firstName' | 'middleName' | 'lastName'> {
@@ -122,18 +108,23 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
       const names = migrateLegacyNameFields(parsed);
       const restCopy = { ...parsed };
       delete restCopy.fullName;
+      delete restCopy.planId;
+      delete restCopy.paymentFrequency;
+      delete restCopy.ageRange;
       const rest = restCopy as Partial<PersistedDraft>;
       const occupationRaw = parsed.occupationId;
       const occupationId = typeof occupationRaw === 'string' && occupationRaw.length > 0 ? occupationRaw : null;
-      const planId = migratePlanId(parsed.planId);
-      const tier = tierForOccupationId(occupationId);
-      const syncedPlanId = tier ? planForTier(tier).id : planId;
+      const lga = typeof parsed.lga === 'string' ? parsed.lga : '';
+      const homeAddress = typeof parsed.homeAddress === 'string' ? parsed.homeAddress : '';
+      const bvn = typeof parsed.bvn === 'string' ? parsed.bvn : '';
       set({
         ...defaultPersist,
         ...rest,
         ...names,
         occupationId,
-        planId: syncedPlanId,
+        lga,
+        homeAddress,
+        bvn,
         hydrated: true,
       });
     } catch {
@@ -143,13 +134,7 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
 
   updateDraft: (patch) => {
     set((prev) => {
-      let next: RegistrationDraftState = { ...prev, ...patch };
-      if (patch.occupationId !== undefined && patch.occupationId !== prev.occupationId) {
-        const tier = tierForOccupationId(patch.occupationId);
-        if (tier) {
-          next = { ...next, planId: planForTier(tier).id };
-        }
-      }
+      const next: RegistrationDraftState = { ...prev, ...patch };
       void writeDraft(pickPersisted(next));
       return next;
     });

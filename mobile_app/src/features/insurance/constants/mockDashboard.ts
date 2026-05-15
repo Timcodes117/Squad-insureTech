@@ -1,7 +1,7 @@
 export type MockCoverStatus = 'active' | 'awaiting_funding' | 'cooldown';
 
 export const MOCK_DASHBOARD = {
-  coverStatus: 'cooldown' as MockCoverStatus,
+  coverStatus: 'awaiting_funding' as MockCoverStatus,
   coverageRemainingNaira: 14_500,
   coverageCapNaira: 20_000,
   cooldownHoursLeft: 48,
