@@ -23,6 +23,7 @@ const claimSchema = new mongoose.Schema(
     treatmentType: { type: String, required: true, trim: true },
     clinicalNote: { type: String, trim: true },
     preAuthCode: { type: String },
+    faceVerified: { type: Boolean, default: false },
 
     status: {
       type: String,

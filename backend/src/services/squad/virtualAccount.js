@@ -49,10 +49,9 @@ async function postOnce(path, payload) {
   return squadClient.post(path, payload);
 }
 
-// Takes a User document and asks Squad to create the individual virtual account.
-// Returns { success: true, virtualAccountNumber, bankCode, bankName, raw } on success,
-//         { success: false, error, status, raw } on Squad validation failure.
-// Only throws on totally unexpected errors (e.g. no network).
+// Returns { success: true, virtualAccountNumber, bankCode, bankName } on success,
+// or { success: false, error } if Squad rejected the BVN/name/dob check.
+// Retries once on 5xx; never throws on 4xx so the caller can surface the error.
 async function createVirtualAccount(user) {
   if (!user) {
     return { success: false, error: 'User is required' };
@@ -97,7 +96,7 @@ async function createVirtualAccount(user) {
         };
       }
     } else {
-      // 4xx — most likely BVN/name/dob mismatch. Surface to caller, do not throw.
+      // 4xx — usually BVN/name/dob mismatch. Bubble up, do not throw.
       logger.warn({ status, message }, 'squad: VA create rejected');
       return {
         success: false,

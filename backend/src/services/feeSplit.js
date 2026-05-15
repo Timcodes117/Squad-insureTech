@@ -1,13 +1,7 @@
 'use strict';
 
-// All inputs/outputs are in KOBO (positive integers).
-//
-// Split rule for a PREMIUM BURN (not funding — funding is 100% user credit):
-//   pool     = round(amount * 0.90)        // insurance pool — pays claims
-//   platform = amount - pool               // BetaHealth revenue (remainder, sums exact)
-//
-// Two buckets only. The old 17% "reserve" bucket is gone.
-
+// Burn-time split (90% pool / 10% platform). Funding is never split.
+// `platform = amount - pool` so rounding can never lose a kobo.
 function splitPremium(amountKobo) {
   if (!Number.isInteger(amountKobo) || amountKobo < 0) {
     throw new Error('splitPremium: amount must be a non-negative integer in kobo');

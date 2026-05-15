@@ -25,4 +25,16 @@ const loginBody = Joi.object({
   password: Joi.string().required(),
 });
 
-module.exports = { registerBody, loginBody };
+const requestOtpBody = Joi.object({
+  identifier: Joi.string().trim().required(),
+  password: Joi.string().required(),
+});
+
+const verifyOtpBody = Joi.object({
+  identifier: Joi.string().trim().required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).required().messages({
+    'string.pattern.base': 'OTP must be 6 digits',
+  }),
+});
+
+module.exports = { registerBody, loginBody, requestOtpBody, verifyOtpBody };

@@ -2,8 +2,18 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { customAlphabet } = require('nanoid');
 
 const NIGERIAN_PHONE_REGEX = /^(\+234|0)[789][01]\d{8}$/;
+
+// Crockford base32 — no I, L, O, U so the code stays unambiguous if a user has
+// to read it aloud as a fallback when their QR can't be scanned.
+const membershipNanoid = customAlphabet('0123456789ABCDEFGHJKMNPQRSTVWXYZ', 9);
+const MEMBERSHIP_PREFIX = 'BH-';
+
+function generateMembershipNumber() {
+  return `${MEMBERSHIP_PREFIX}${membershipNanoid()}`;
+}
 
 const userSchema = new mongoose.Schema(
   {
@@ -76,8 +86,8 @@ const userSchema = new mongoose.Schema(
       default: 'user',
       index: true,
     },
-    // Pay-to-activate: users register inactive and only become active once
-    // their wallet balance meets the weekly premium (flipped by the funding webhook).
+    // Pay-to-activate: registered users start inactive and are flipped active
+    // by the funding webhook once balance >= weeklyPremium.
     isActive: {
       type: Boolean,
       default: false,
@@ -94,6 +104,16 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
+    },
+    // Customer-facing membership number, e.g. BH-AB23JKL5M. Printed on physical
+    // cards and encoded into the user's QR code. Generated at registration; if
+    // missing on an existing user (legacy row), the /users/me/card endpoint
+    // backfills it on first read.
+    membershipNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
     },
     virtualAccountNumber: {
       type: String,
@@ -112,7 +132,22 @@ const userSchema = new mongoose.Schema(
     preAuthExpiresAt: {
       type: Date,
     },
-    // Coverage stored in KOBO. ₦20,000 = 2,000,000 kobo.
+    // Login OTP (request-otp → verify-otp two-step flow).
+    loginOtp: {
+      type: String,
+      select: false,
+    },
+    loginOtpExpiresAt: {
+      type: Date,
+    },
+    // Face verification token issued by /hospital/users/face-verify, single-use
+    // and short-lived. Attached to a claim when submitted with this token.
+    faceVerifiedToken: {
+      type: String,
+    },
+    faceVerifiedExpiresAt: {
+      type: Date,
+    },
     coverageLimit: {
       type: Number,
       default: 2_000_000,
@@ -150,11 +185,15 @@ userSchema.pre('save', async function preSave(next) {
       this.coverageResetAt = new Date(created.getTime() + 30 * 24 * 60 * 60 * 1000);
     }
 
+    if (this.isNew && !this.membershipNumber) {
+      this.membershipNumber = generateMembershipNumber();
+    }
+
     if (!this.isModified('passwordHash')) {
       return next();
     }
 
-    // Only hash if the value doesn't already look like a bcrypt hash.
+    // Skip re-hashing if the value is already a bcrypt digest (seed scripts pass raw passwords).
     if (typeof this.passwordHash === 'string' && /^\$2[aby]\$\d+\$/.test(this.passwordHash)) {
       return next();
     }
@@ -180,3 +219,4 @@ const User = mongoose.model('User', userSchema);
 
 module.exports = User;
 module.exports.NIGERIAN_PHONE_REGEX = NIGERIAN_PHONE_REGEX;
+module.exports.generateMembershipNumber = generateMembershipNumber;

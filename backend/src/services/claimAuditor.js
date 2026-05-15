@@ -1,14 +1,11 @@
 'use strict';
 
-// Rule-based claim auditor.
-// Pure-ish: takes already-fetched data, returns a decision + effective limits.
-// Caller is responsible for persisting the result and moving money.
-//
-// All amounts are in KOBO.
+// Pure auditor — takes pre-fetched data, returns a verdict. The caller persists
+// and moves money. Amounts in kobo.
 
-const COOLDOWN_MS = 72 * 60 * 60 * 1000;        // 72 hours
-const WEEK_ONE_MS = 7 * 24 * 60 * 60 * 1000;    // 7 days
-const WEEK_ONE_CAP_KOBO = 500_000;              // ₦5,000 cap during week 1
+const COOLDOWN_MS = 72 * 60 * 60 * 1000;
+const WEEK_ONE_MS = 7 * 24 * 60 * 60 * 1000;
+const WEEK_ONE_CAP_KOBO = 500_000;
 
 function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) {
   const checks = {
@@ -23,11 +20,9 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
   };
   const notes = [];
 
-  // --- Whitelist ---
   checks.whitelistOk = Boolean(hospital?.isVerified && hospital?.isActive);
   if (!checks.whitelistOk) notes.push('Hospital not whitelisted/verified.');
 
-  // --- Cooldown: must have at least one premium burn AND be past 72h since first burn ---
   const now = Date.now();
   if (!user?.firstPremiumAt) {
     checks.cooldownOk = false;
@@ -42,7 +37,6 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
     }
   }
 
-  // --- Week-1 cap: first 7 days after firstPremiumAt → cap effective limit at ₦5,000 ---
   let effectiveLimit = user?.coverageRemaining ?? 0;
   if (user?.firstPremiumAt) {
     const sinceFirst = now - new Date(user.firstPremiumAt).getTime();
@@ -54,7 +48,6 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
   }
   checks.effectiveLimit = effectiveLimit;
 
-  // --- Coverage: user active + effectiveLimit > 0 ---
   if (!user?.isActive) {
     checks.coverageOk = false;
     notes.push('User account inactive.');
@@ -70,7 +63,6 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
     }
   }
 
-  // --- Duplicate: same user+hospital, last 24h, in [pending|approved|paid] ---
   const cutoff = now - 24 * 60 * 60 * 1000;
   const blocking = new Set(['pending', 'approved', 'paid']);
   const recentDup = recentClaims.find((c) => {
@@ -82,7 +74,6 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
     notes.push(`Possible duplicate of claim ${recentDup._id || recentDup.id} in last 24h.`);
   }
 
-  // --- Soft risk: single claim > 80% of coverageLimit ---
   if (user?.coverageLimit && amount > user.coverageLimit * 0.8) {
     checks.riskMatchOk = false;
     notes.push('Claim amount exceeds 80% of coverage limit in a single visit.');
@@ -90,7 +81,6 @@ function auditClaim({ user, hospital, amount, preAuthCode, recentClaims = [] }) 
 
   if (preAuthCode) notes.push(`PreAuth code presented: ${preAuthCode}.`);
 
-  // --- Decision precedence ---
   let decision;
   if (!checks.whitelistOk) decision = 'rejected';
   else if (!user?.isActive) decision = 'rejected';

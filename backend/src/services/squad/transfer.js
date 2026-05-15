@@ -66,7 +66,7 @@ async function initiateTransfer({ amount, bankCode, accountNumber, accountName, 
     account_number: String(accountNumber),
     account_name: accountName,
     currency_id: 'NGN',
-    remark: remark || `MyBodyCover transfer ${reference}`,
+    remark: remark || `BetaHealth transfer ${reference}`,
   };
 
   try {

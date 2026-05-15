@@ -3,16 +3,9 @@
 const mongoose = require('mongoose');
 const AppError = require('../utils/AppError');
 
-// Singleton system wallet that tracks the HMO pool float and the platform fee accumulator.
-// All values in KOBO.
-//
-// SIMPLIFIED V0 ACCOUNTING NOTE:
-//   The user's Wallet still holds the FULL premium they paid in. PoolWallet is the
-//   system's BOOK-keeping view of how much of that is "owed" to the pool float
-//   (73%) and the platform (10% — remainder after pool + reserve). Reserve (17%)
-//   stays in the user wallet conceptually and is not moved.
-//   Post-MVP: the pool float becomes a real Squad sub-account that money is
-//   actually swept into, so this double-counting goes away.
+// System-wide singleton. The pool float pays claims; platformBalance accrues
+// BetaHealth's 10% fee. All values in kobo. The 90/10 split runs on premium
+// burns; user funding is never split.
 
 const ledgerEntrySchema = new mongoose.Schema(
   {

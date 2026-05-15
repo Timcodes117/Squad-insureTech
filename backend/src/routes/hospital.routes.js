@@ -8,15 +8,20 @@ const c = require('../controllers/hospital.controller');
 
 const router = express.Router();
 
-// Open registration (hackathon scope; in prod gate behind admin approval).
 router.post('/register', validateRequest({ body: v.registerBody }), c.registerHospital);
 
-// Everything below requires x-hospital-api-key.
 router.get(
   '/users/lookup',
   hospitalAuth,
   validateRequest({ query: v.userLookupQuery }),
   c.lookupUser
+);
+
+router.post(
+  '/users/face-verify',
+  hospitalAuth,
+  validateRequest({ body: v.faceVerifyBody }),
+  c.verifyFace
 );
 
 router.post(

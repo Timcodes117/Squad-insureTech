@@ -1,133 +1,77 @@
-# MyBodyCover — Backend
+# BetaHealth — Backend
 
-Micro-HMO insurance platform for Nigeria's informal sector. Powered by [Squad](https://squadco.com) for payments.
-
-This package contains the Node.js/Express backend. **Prompt #1** scope: scaffold, auth, models, Squad service skeleton, health check.
+Micro health cover for Nigeria's informal sector. Users pay weekly premiums into a Squad virtual account; when they get sick at a partner clinic the claim is audited and the hospital is paid instantly via Squad Transfer.
 
 ## Stack
 
-- Node.js 20 + Express 4
-- MongoDB Atlas via Mongoose
-- BullMQ + Upstash Redis (wired in later prompts)
-- JWT (HS256) + bcrypt
-- Joi validation
-- Pino logging
-- Axios for Squad HTTP
+Node.js 20, Express 4, MongoDB (Mongoose), Redis + BullMQ for crons, JWT auth, Joi validation, Pino logging, Twilio (optional) for SMS. Money is stored in **kobo** everywhere (₦1 = 100 kobo); Squad webhooks send naira and the boundary converts.
 
 ## Setup
 
 ```bash
+git clone <repo>
 cd backend
-cp .env.example .env       # then fill in real values
+cp .env.example .env       # fill in MONGODB_URI, JWT_SECRET, SQUAD_SECRET_KEY at minimum
 npm install
-npm run dev                # nodemon, or: npm start
+npm run dev                # or: npm start
 ```
 
-The server boots on `http://localhost:4000` by default. It connects to MongoDB **before** Express starts listening.
+Required: `MONGODB_URI`, `JWT_SECRET`, `SQUAD_SECRET_KEY`. Optional: `REDIS_URL` (enables cron jobs), `TWILIO_*` (enables SMS), `ADMIN_KEY` (defaults to `local_dev_admin_key_change_me`).
 
-## Environment variables
+## Squad integration
 
-See [`.env.example`](.env.example). Required at boot: `MONGODB_URI`, `JWT_SECRET`, `SQUAD_SECRET_KEY`. The process exits immediately with a Joi error report if any required key is missing or malformed.
+Four endpoints, all from `https://sandbox-api-d.squadco.com` (override via `SQUAD_BASE_URL`):
 
-| Var | Required | Notes |
-| --- | --- | --- |
-| `NODE_ENV` | no | `development` / `test` / `production` |
-| `PORT` | no | default `4000` |
-| `MONGODB_URI` | **yes** | Atlas SRV string |
-| `REDIS_URL` | no | enables queues when set (Prompt #3+) |
-| `JWT_SECRET` | **yes** | min 16 chars |
-| `JWT_EXPIRES_IN` | no | default `7d` |
-| `SQUAD_BASE_URL` | no | default `https://sandbox-api-d.squadco.com` |
-| `SQUAD_SECRET_KEY` | **yes** | `sandbox_sk_...` |
-| `SQUAD_PUBLIC_KEY` | no | |
-| `SQUAD_BENEFICIARY_ACCOUNT` | no | GTB account for live; blank in sandbox |
-| `TWILIO_*` | no | wired up in Prompt #5 |
+- `POST /virtual-account` — provision a user's virtual account
+- Inbound webhook to `/api/v1/webhooks/squad` — HMAC SHA-512 verified
+- `POST /payout/account/lookup` — verify hospital/withdrawal destination
+- `POST /payout/transfer` — settle claims and process withdrawals
 
-## Endpoints (Prompt #1)
+## API docs
 
-Base: `/api/v1`
+Swagger UI: **http://localhost:4000/api/v1/docs**
+Raw OpenAPI JSON: `http://localhost:4000/api/v1/docs.json`
 
-| Method | Path | Auth | Description |
-| --- | --- | --- | --- |
-| GET | `/health` | — | service + DB readiness |
-| POST | `/auth/register` | — | create user, return JWT |
-| POST | `/auth/login` | — | login by email **or** phone |
-| GET | `/auth/me` | Bearer | current user |
+Click the **Authorize** button at the top of the docs to paste the three auth tokens (Bearer JWT, hospital API key, admin key) once — they persist across all "Try it out" calls.
 
-### Register payload
+## Demo seed
 
-```json
-{
-  "email": "ada@example.com",
-  "phone": "08012345678",
-  "password": "Str0ngP@ss",
-  "fullName": "Ada Lovelace",
-  "dob": "1995-04-12",
-  "bvn": "12345678901",
-  "occupation": "bricklayer"
-}
-```
+`npm run seed:demo` resets the database to a known state for a live demo:
 
-`riskTier` and `weeklyPremium` are derived server-side from `occupation` via [src/utils/riskMapping.js](src/utils/riskMapping.js):
+- A verified hospital `BetaHealth Demo Clinic` and its `apiKey`
+- Pool float of ₦500,000
+- **User A** — mature: ₦10,000 wallet, past 72h cooldown, ready to claim
+- **User B** — fresh: ₦500 wallet, inside 72h cooldown (proves rejection)
+- **User C** — zero balance: inactive (proves pay-to-activate when funded live on stage)
 
-- **high** (₦1000/wk): bricklayer, welder, driver, okada, conductor, porter, mechanic, construction, electrician, plumber, security
-- **medium** (₦750/wk): trader, market, vendor, tailor, hairdresser, barber, cook, cleaner, farmer
-- **low** (₦500/wk): everything else
+The script prints every credential at the end. Password for all demo users is `demo1234`. Refuses to run with `NODE_ENV=production`.
 
-### Login payload
+## Demo runbook
 
-```json
-{ "identifier": "08012345678", "password": "Str0ngP@ss" }
-```
+Pre-flight: `npm run seed:demo`, then `npm run dev`. Open Swagger and click Authorize.
 
-`identifier` accepts either email or phone.
+1. **Health** — `GET /health` shows mongo/redis/squad/twilio status.
+2. **Show pay-to-activate** — login as User C (`demo-c@betahealth.test` / `demo1234`), call `GET /users/me/wallet` → `balance: 0, isActive: false`.
+3. **Fund User C live** — `node scripts/simulateWebhook.js --va 9988800030 --amount 1000` (or POST to `/webhooks/squad` from Swagger with a signed body). User C flips to active; check `GET /notifications` → `funding_received` + `cover_activated` entries.
+4. **Premium burn** — `POST /admin/jobs/run-premium-burn` (admin key) → User A burns ₦500, pool +₦450, platform +₦50. Notification fires.
+5. **Mature claim (User A)** — `GET /hospital/users/lookup?phone=08099000010` (hospital key) to get a preAuthCode, then `POST /hospital/claims` with `amount: 150000`. Decision `paid`, pool debited, coverage decremented, `claim_approved` notification.
+6. **Cooldown rejection (User B)** — same flow with phone `08099000020` → decision `rejected`, `cooldownOk: false`, `weekOneCapApplied: true`, `claim_rejected` notification.
+7. **Withdrawal** — login as User A, `GET /users/me/withdrawable` then `POST /users/me/withdraw` with `amount: 800000`. If Squad transfer fails the wallet is auto-refunded (`reversal` ledger entry, `withdrawal_failed` notification).
+8. **Fraud scan** — `POST /admin/jobs/run-hospital-anomaly-scan` returns the scan summary; hospitals younger than 3 days are skipped to avoid false positives.
 
-### Standard response shape
+Full lifecycle in ~3 minutes. Every step also shows up in `GET /notifications`.
 
-```json
-{ "success": true, "data": { ... } }
-{ "success": false, "error": "...", "details": [ ... ] }
-```
+## Architecture
 
-## What's wired up (and what's NOT)
+- `src/models/` — Mongoose schemas (User, Wallet, PoolWallet, Hospital, Claim, Notification).
+- `src/services/` — Squad client, claim auditor, fee split, SMS, notification orchestrator.
+- `src/jobs/` — BullMQ jobs: weekly premium burn (Mon 09:00 Africa/Lagos), daily coverage reset (00:30), daily hospital anomaly scan (01:00). All have admin endpoints for manual trigger.
+- `src/controllers/` + `src/routes/` — auth, user, hospital, webhook, admin, notifications.
+- `src/middleware/` — JWT, hospital API key, admin key, request validation, error handler.
+- `src/docs/openapi.js` — hand-authored OpenAPI 3.0 spec served by swagger-ui-express.
 
-| Module | State |
-| --- | --- |
-| Auth (register/login/me) | working |
-| User model + risk tiering | working |
-| Health check | working |
-| Mongo connect + graceful shutdown | working |
-| Squad axios client | skeleton |
-| `createVirtualAccount(...)` | callable; **not yet** invoked from register flow — Prompt #2 |
-| `verifyWebhookSignature(rawBody, sig)` | HMAC SHA512, timing-safe |
-| Webhook route | Prompt #2 |
-| Wallet model | placeholder schema only — expanded in Prompt #2 |
-| Redis / BullMQ | client skeleton — Prompt #3 |
-| Twilio | Prompt #5 |
+For business rules and decisions (90/10 split, 72h cooldown, week-1 ₦5k cap, pay-to-activate, anomaly thresholds) see the PRD.
 
-## Folder layout
+## License
 
-```
-src/
-  config/      env, db, redis, logger
-  models/      User, Wallet (placeholder)
-  middleware/  auth, errorHandler, validateRequest
-  services/
-    squad/     client, virtualAccount, webhooks, index
-  controllers/ auth.controller
-  routes/      auth.routes, health.routes, index
-  validators/  auth.validator
-  utils/       asyncHandler, AppError, riskMapping
-  app.js       Express setup (helmet, cors, json+rawBody, pino-http)
-  server.js    entry point (Mongo -> listen, SIGTERM/SIGINT)
-```
-
-## Quick smoke test
-
-```bash
-curl http://localhost:4000/api/v1/health
-
-curl -X POST http://localhost:4000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"a@b.co","phone":"08012345678","password":"Str0ngP@ss","fullName":"Test User","dob":"1995-04-12","bvn":"12345678901","occupation":"bricklayer"}'
-```
+MIT — see [LICENSE](LICENSE).

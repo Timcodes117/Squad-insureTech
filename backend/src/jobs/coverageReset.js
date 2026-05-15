@@ -2,12 +2,12 @@
 
 const logger = require('../config/logger');
 const User = require('../models/User');
+const { notifyUser } = require('../services/notification');
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Resets coverageRemaining = coverageLimit and rolls coverageResetAt forward
-// 30 days, but only for users whose own rolling 30-day cycle has elapsed.
-// Each user resets on their own date — no global month.
+// Each user resets on their own rolling 30-day cycle from registration. The
+// daily job picks up whoever's coverageResetAt has elapsed since last run.
 async function runCoverageReset(opts = {}) {
   const { userId } = opts;
   const now = new Date();
@@ -28,6 +28,18 @@ async function runCoverageReset(opts = {}) {
     user.coverageResetAt = new Date(now.getTime() + THIRTY_DAYS_MS);
     await user.save();
     summary.reset += 1;
+
+    await notifyUser(
+      user._id,
+      'coverage_reset',
+      'Coverage refreshed',
+      `BetaHealth: your monthly cover has been refreshed. New limit ₦${(user.coverageLimit / 100).toLocaleString()}.`,
+      {
+        coverageLimit: user.coverageLimit,
+        previousRemaining: oldRemaining,
+        nextResetAt: user.coverageResetAt,
+      }
+    );
 
     logger.info(
       {

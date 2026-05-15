@@ -1,0 +1,1 @@
+export { OnboardingDecorBackground } from './OnboardingDecorBackground';
