@@ -226,6 +226,184 @@ const devFundUser = asyncHandler(async (req, res) => {
   });
 });
 
+// GET /api/v1/admin/stats — overview tiles for the admin dashboard.
+const getStats = asyncHandler(async (_req, res) => {
+  const [
+    pool,
+    totalUsers,
+    activeUsers,
+    inactiveUsers,
+    totalHospitals,
+    verifiedHospitals,
+    flaggedHospitals,
+    totalClaims,
+    paidClaims,
+    flaggedClaims,
+    rejectedClaims,
+    approvedClaims,
+  ] = await Promise.all([
+    PoolWallet.getOrCreate(),
+    User.countDocuments({}),
+    User.countDocuments({ isActive: true }),
+    User.countDocuments({ isActive: false }),
+    Hospital.countDocuments({}),
+    Hospital.countDocuments({ isVerified: true }),
+    Hospital.countDocuments({ flagged: true }),
+    Claim.countDocuments({}),
+    Claim.countDocuments({ status: 'paid' }),
+    Claim.countDocuments({ status: 'flagged' }),
+    Claim.countDocuments({ status: 'rejected' }),
+    Claim.countDocuments({ status: 'approved' }),
+  ]);
+
+  const totalPaidAgg = await Claim.aggregate([
+    { $match: { status: 'paid' } },
+    { $group: { _id: null, sum: { $sum: '$amountCovered' } } },
+  ]);
+  const totalPaidKobo = totalPaidAgg[0]?.sum || 0;
+
+  res.json({
+    success: true,
+    data: {
+      pool: {
+        balance: pool.balance,
+        platformBalance: pool.platformBalance,
+      },
+      users: { total: totalUsers, active: activeUsers, inactive: inactiveUsers },
+      hospitals: {
+        total: totalHospitals,
+        verified: verifiedHospitals,
+        flagged: flaggedHospitals,
+      },
+      claims: {
+        total: totalClaims,
+        paid: paidClaims,
+        approved: approvedClaims,
+        flagged: flaggedClaims,
+        rejected: rejectedClaims,
+        totalPaidAmount: totalPaidKobo,
+      },
+    },
+  });
+});
+
+// GET /api/v1/admin/pool — pool wallet detail + recent ledger.
+const getPool = asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 30, 200);
+  const pool = await PoolWallet.findOne({ key: 'MAIN_POOL' }).lean();
+  if (!pool) return res.json({ success: true, data: null });
+  const ledger = (pool.ledger || [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
+  res.json({
+    success: true,
+    data: {
+      balance: pool.balance,
+      platformBalance: pool.platformBalance,
+      ledger,
+    },
+  });
+});
+
+// GET /api/v1/admin/users
+const listUsers = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const skip = (page - 1) * limit;
+  const search = (req.query.search || '').toString().trim();
+
+  const query = {};
+  if (search) {
+    const r = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    query.$or = [
+      { email: r },
+      { phone: r },
+      { fullName: r },
+      { membershipNumber: r },
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    User.countDocuments(query),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    },
+  });
+});
+
+// GET /api/v1/admin/hospitals?flagged=true|false
+const listHospitals = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const skip = (page - 1) * limit;
+
+  const query = {};
+  if (req.query.flagged === 'true') query.flagged = true;
+  if (req.query.flagged === 'false') query.flagged = { $ne: true };
+  if (req.query.verified === 'true') query.isVerified = true;
+  if (req.query.verified === 'false') query.isVerified = { $ne: true };
+
+  const [items, total] = await Promise.all([
+    Hospital.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Hospital.countDocuments(query),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    },
+  });
+});
+
+// POST /api/v1/admin/hospitals/:id/verify — flip isVerified on. Used when Squad's
+// account lookup wasn't profiled and we manually confirmed the bank account.
+const verifyHospital = asyncHandler(async (req, res) => {
+  const hospital = await Hospital.findById(req.params.id);
+  if (!hospital) throw AppError.notFound('Hospital not found');
+  hospital.isVerified = true;
+  await hospital.save();
+  logger.info({ hospitalId: hospital.id }, 'admin: hospital verified');
+  res.json({ success: true, data: { hospital: hospital.toJSON() } });
+});
+
+// GET /api/v1/admin/claims?status=paid|flagged|rejected|approved|pending
+const listClaims = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const skip = (page - 1) * limit;
+
+  const query = {};
+  if (req.query.status) query.status = req.query.status;
+
+  const [items, total] = await Promise.all([
+    Claim.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', 'fullName phone membershipNumber')
+      .populate('hospitalId', 'name flagged')
+      .lean(),
+    Claim.countDocuments(query),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    },
+  });
+});
+
 module.exports = {
   approveFlaggedClaim,
   triggerPremiumBurn,
@@ -233,4 +411,10 @@ module.exports = {
   triggerHospitalAnomalyScan,
   clearHospitalFlag,
   devFundUser,
+  getStats,
+  getPool,
+  listUsers,
+  listHospitals,
+  verifyHospital,
+  listClaims,
 };
