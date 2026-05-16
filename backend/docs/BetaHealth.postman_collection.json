@@ -247,6 +247,33 @@
           }
         },
         {
+          "name": "POST /users/me/premium/pay",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/premium/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "premium", "pay"]
+            },
+            "description": "Burns this week's premium from the wallet. First call activates cover + starts the 72-hour cooldown. After that the daily 9am cron handles subsequent weekly burns. Returns 400 if the user already paid this week or has insufficient balance."
+          }
+        },
+        {
+          "name": "GET /users/me/activity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/activity?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "activity"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Unified recent-activity feed: transactions + claims merged newest-first. For the mobile 'recent activity' panel."
+          }
+        },
+        {
           "name": "GET /users/me/withdrawable",
           "request": {
             "method": "GET",

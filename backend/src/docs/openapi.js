@@ -900,6 +900,101 @@ const paths = {
       },
     },
   },
+  '/users/me/premium/pay': {
+    post: {
+      tags: ['Users'],
+      summary: 'Pay this week\'s premium manually (kicks off the cycle)',
+      description:
+        'Burns one week of the user\'s premium from their wallet. The first call activates cover, sets firstPremiumAt, and starts the 72-hour claims cooldown. After the first burn the daily 09:00 Africa/Lagos cron handles subsequent weekly burns automatically (per-user rolling 7-day cycle). Returns 400 if the user already paid this week, or if balance < weeklyPremium.',
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: 'Burn complete',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'First premium paid — cover is now active',
+                data: {
+                  premium: 50000,
+                  balance: 950000,
+                  poolShare: 45000,
+                  platformShare: 5000,
+                  reference: 'BURN_6a07...',
+                  isFirstPayment: true,
+                  firstPremiumAt: '2026-05-16T01:00:00.000Z',
+                  lastPremiumBurnAt: '2026-05-16T01:00:00.000Z',
+                  claimsUnlockAt: '2026-05-19T01:00:00.000Z',
+                  nextPaymentAt: '2026-05-23T01:00:00.000Z',
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: '#/components/responses/Error400' },
+      },
+    },
+  },
+  '/users/me/activity': {
+    get: {
+      tags: ['Users'],
+      summary: 'Unified recent-activity feed (transactions + claims, newest-first)',
+      description:
+        'Merges wallet ledger entries and claims into one chronologically sorted feed. Use this for the "recent activity" panel in the app. /users/me/transactions and /users/me/claims still exist if you want one or the other.',
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Activity feed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  walletBalance: 950000,
+                  items: [
+                    {
+                      kind: 'claim',
+                      id: '6a07...',
+                      type: 'claim_paid',
+                      title: 'Claim at BetaHealth Demo Clinic',
+                      description: 'Paid ₦1,500',
+                      amount: 150000,
+                      status: 'paid',
+                      treatmentType: 'malaria',
+                      createdAt: '2026-05-16T01:30:00.000Z',
+                    },
+                    {
+                      kind: 'transaction',
+                      id: '6a06...',
+                      type: 'premium_burn',
+                      direction: 'debit',
+                      title: 'Weekly premium paid',
+                      description: 'Weekly premium - BetaHealth',
+                      amount: 50000,
+                      balanceAfter: 950000,
+                      reference: 'BURN_...',
+                      createdAt: '2026-05-16T01:00:00.000Z',
+                    },
+                  ],
+                  counts: { transactions: 2, claims: 1, returned: 3 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   '/users/me/withdrawable': {
     get: {
       tags: ['Users'],
