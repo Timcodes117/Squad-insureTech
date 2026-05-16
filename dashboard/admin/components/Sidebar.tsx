@@ -17,6 +17,17 @@ const NAV = [
     ),
   },
   {
+    href: "/users",
+    label: "Users",
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+      />
+    ),
+  },
+  {
     href: "/hospitals",
     label: "Hospitals",
     icon: (
@@ -118,13 +129,15 @@ export function MobileTopbar() {
   const title =
     pathname === "/dashboard"
       ? "Overview"
-      : pathname?.startsWith("/hospitals")
-        ? "Hospitals"
-        : pathname?.startsWith("/claims")
-          ? "Claims"
-          : pathname?.startsWith("/jobs")
-            ? "Jobs"
-            : "BetaHealth Admin";
+      : pathname?.startsWith("/users")
+        ? "Users"
+        : pathname?.startsWith("/hospitals")
+          ? "Hospitals"
+          : pathname?.startsWith("/claims")
+            ? "Claims"
+            : pathname?.startsWith("/jobs")
+              ? "Jobs"
+              : "BetaHealth Admin";
 
   return (
     <div className="md:hidden sticky top-0 z-20 h-14 border-b border-slate-200 bg-white px-4 flex items-center gap-3">

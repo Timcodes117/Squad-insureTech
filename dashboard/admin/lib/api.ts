@@ -77,12 +77,28 @@ export const adminApi = {
   listClaims: (key: string, params: { page?: number; limit?: number; status?: string } = {}) =>
     adminFetch("/admin/claims", key, { query: params }),
 
+  createHospital: (
+    key: string,
+    body: {
+      name: string;
+      contactPhone?: string;
+      email?: string;
+      address?: string;
+      bankCode: string;
+      accountNumber: string;
+      accountName?: string;
+    }
+  ) => adminFetch("/admin/hospitals", key, { method: "POST", body }),
   verifyHospital: (key: string, id: string) =>
     adminFetch(`/admin/hospitals/${id}/verify`, key, { method: "POST" }),
   clearHospitalFlag: (key: string, id: string) =>
     adminFetch(`/admin/hospitals/${id}/clear-flag`, key, { method: "POST" }),
   approveClaim: (key: string, id: string) =>
     adminFetch(`/admin/claims/${id}/approve`, key, { method: "POST" }),
+  fundUser: (
+    key: string,
+    body: { userId?: string; phone?: string; membership?: string; amountKobo: number }
+  ) => adminFetch("/admin/dev/fund-user", key, { method: "POST", body }),
 
   runPremiumBurn: (key: string, body: { userId?: string } = {}) =>
     adminFetch("/admin/jobs/run-premium-burn", key, { method: "POST", body }),
