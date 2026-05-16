@@ -27,6 +27,14 @@ async function lookupAccount(bankCode, accountNumber) {
   if (!bankCode || !accountNumber) {
     return { success: false, error: 'bankCode and accountNumber are required' };
   }
+  if (config.squad.mockPayouts) {
+    logger.info({ bankCode, accountNumber }, 'squad: MOCK lookupAccount');
+    return {
+      success: true,
+      accountName: 'MOCK ACCOUNT (SQUAD_MOCK_PAYOUTS=true)',
+      mocked: true,
+    };
+  }
   try {
     const res = await squadClient.post('/payout/account/lookup', {
       bank_code: String(bankCode),
@@ -59,6 +67,16 @@ async function initiateTransfer({ amount, bankCode, accountNumber, accountName, 
   }
 
   const reference = buildTransferReference();
+  if (config.squad.mockPayouts) {
+    logger.info({ reference, amount }, 'squad: MOCK initiateTransfer');
+    return {
+      success: true,
+      reference,
+      status: 'success',
+      mocked: true,
+      raw: { mocked: true, note: 'SQUAD_MOCK_PAYOUTS=true' },
+    };
+  }
   const payload = {
     transaction_reference: reference,
     amount: String(amount),

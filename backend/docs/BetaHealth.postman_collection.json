@@ -632,6 +632,26 @@
               "path": ["admin", "hospitals", "{{hospitalId}}", "clear-flag"]
             }
           }
+        },
+        {
+          "name": "POST /admin/dev/fund-user (test-mode wallet top-up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-key", "value": "{{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{userPhone}}\",\n  \"amountKobo\": 100000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/dev/fund-user",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dev", "fund-user"]
+            },
+            "description": "Frontend test-mode funding. Same effect as a real Squad webhook: credits wallet, flips isActive if balance >= weeklyPremium, fires funding_received + cover_activated notifications. amountKobo is in kobo (₦1,000 = 100000). Body accepts userId OR phone OR membership."
+          }
         }
       ]
     }

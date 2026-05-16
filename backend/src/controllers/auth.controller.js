@@ -82,6 +82,21 @@ const register = asyncHandler(async (req, res) => {
 
   const token = signToken(user);
 
+  // Welcome notification so a brand-new user has at least one entry in their
+  // notification feed and an email/SMS confirmation of registration.
+  const premiumNaira = (user.weeklyPremium / 100).toLocaleString();
+  await notifyUser(
+    user._id,
+    'system',
+    'Welcome to BetaHealth',
+    `Hi ${user.fullName.split(' ')[0]}, your BetaHealth account is ready. Fund your wallet to activate cover — weekly premium ₦${premiumNaira}. Membership: ${user.membershipNumber}.`,
+    {
+      membershipNumber: user.membershipNumber,
+      weeklyPremium: user.weeklyPremium,
+      virtualAccountNumber: user.virtualAccountNumber || null,
+    }
+  );
+
   const responseData = {
     user: user.toSafeJSON(),
     token,

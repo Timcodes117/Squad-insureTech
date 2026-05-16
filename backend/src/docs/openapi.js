@@ -1216,6 +1216,42 @@ const paths = {
       },
     },
   },
+  '/admin/dev/fund-user': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Dev-only: credit a user wallet without going through a Squad webhook',
+      description:
+        'Simulates a Squad funding webhook from the API. Same end-state as the real webhook: idempotent credit, isActive flip when balance crosses weeklyPremium, funding_received + cover_activated notifications. Use this from the frontend in test mode instead of running scripts/simulateWebhook.js from a terminal. Production must keep ADMIN_KEY rotated and ideally remove this route.',
+      security: [{ adminKey: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['amountKobo'],
+              properties: {
+                userId: { type: 'string', description: 'Mongo _id of the user. One of userId/phone/membership is required.' },
+                phone: { type: 'string', example: '08099000030' },
+                membership: { type: 'string', example: 'BH-AB23JKL5M' },
+                amountKobo: { type: 'integer', minimum: 1, example: 100000, description: '₦1,000 = 100000' },
+                reference: {
+                  type: 'string',
+                  description: 'Optional. Pass the same reference twice to verify the idempotency guard.',
+                },
+              },
+            },
+            example: { phone: '08099000030', amountKobo: 100000 },
+          },
+        },
+      },
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        400: { $ref: '#/components/responses/Error400' },
+        404: { $ref: '#/components/responses/Error404' },
+      },
+    },
+  },
 };
 
 const openapi = {

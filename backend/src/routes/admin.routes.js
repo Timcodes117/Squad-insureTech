@@ -16,4 +16,7 @@ router.post('/jobs/run-hospital-anomaly-scan', c.triggerHospitalAnomalyScan);
 
 router.post('/hospitals/:id/clear-flag', c.clearHospitalFlag);
 
+// Dev-only: simulate a Squad funding webhook from the API.
+router.post('/dev/fund-user', c.devFundUser);
+
 module.exports = router;

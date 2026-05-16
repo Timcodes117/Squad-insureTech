@@ -23,6 +23,10 @@ const schema = Joi.object({
   SQUAD_PUBLIC_KEY: Joi.string().allow('').optional(),
   SQUAD_BENEFICIARY_ACCOUNT: Joi.string().allow('').optional(),
   SQUAD_MERCHANT_ID: Joi.string().allow('').optional(),
+  // When true, lookupAccount + initiateTransfer return mocked success. Used for
+  // local/demo runs when Squad sandbox has not enabled payout endpoints on the
+  // merchant. Must be false in production.
+  SQUAD_MOCK_PAYOUTS: Joi.boolean().truthy('true').falsy('false').default(false),
 
   ADMIN_KEY: Joi.string().min(8).default('local_dev_admin_key_change_me'),
 
@@ -77,6 +81,7 @@ const config = Object.freeze({
     publicKey: value.SQUAD_PUBLIC_KEY || null,
     beneficiaryAccount: value.SQUAD_BENEFICIARY_ACCOUNT || null,
     merchantId: value.SQUAD_MERCHANT_ID || null,
+    mockPayouts: value.SQUAD_MOCK_PAYOUTS,
   },
 
   admin: {
