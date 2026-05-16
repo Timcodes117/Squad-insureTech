@@ -26,6 +26,14 @@ function getTransport() {
       port: config.smtp.port,
       secure: config.smtp.secure,
       auth: { user: config.smtp.user, pass: config.smtp.pass },
+      // Force IPv4 — Render's free tier doesn't route IPv6 to Gmail,
+      // causing ENETUNREACH on smtp.gmail.com's AAAA records.
+      family: 4,
+      // Fail fast so a slow SMTP server can't stall API responses; the
+      // notifyUser flow runs the send in the background anyway.
+      connectionTimeout: 7000,
+      greetingTimeout: 7000,
+      socketTimeout: 10000,
     });
     return _transport;
   } catch (err) {
