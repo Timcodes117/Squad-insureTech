@@ -1,15 +1,27 @@
 import { apiClient } from '@/core/api/client';
+import { unwrapResponse } from '@/core/api/unwrapResponse';
 
-import type { VirtualAccountDetails, WalletBalance } from '../types/wallet.types';
+import type { WalletSnapshot, WithdrawableResponse } from '@/types/backend';
+
+export type WithdrawBody = {
+  amount: number;
+  bankCode: string;
+  accountNumber: string;
+};
 
 export const walletApi = {
-  // TODO: GET /wallet (backend aggregates Squad webhooks + ledger).
-  getWallet: async (): Promise<WalletBalance> => {
-    void apiClient;
-    return { amount: 0, currency: 'NGN' };
+  getWallet: async (): Promise<WalletSnapshot> => {
+    const res = await apiClient.get('/users/me/wallet');
+    return unwrapResponse<WalletSnapshot>(res);
   },
-  getVirtualAccount: async (): Promise<VirtualAccountDetails> => {
-    void apiClient;
-    return { accountNumber: '', bankName: '', accountName: '' };
+
+  getWithdrawable: async (): Promise<WithdrawableResponse> => {
+    const res = await apiClient.get('/users/me/withdrawable');
+    return unwrapResponse<WithdrawableResponse>(res);
+  },
+
+  withdraw: async (body: WithdrawBody): Promise<unknown> => {
+    const res = await apiClient.post('/users/me/withdraw', body);
+    return unwrapResponse(res);
   },
 };

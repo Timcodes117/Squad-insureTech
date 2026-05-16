@@ -1,9 +1,9 @@
 import { profileApi } from '../api/profile.api';
-import type { UserProfile } from '../types/profile.types';
+import type { ProfileBundle } from '../api/profile.api';
 
 class ProfileRepository {
-  async getProfile(): Promise<UserProfile> {
-    return profileApi.getProfile();
+  async getProfileBundle(): Promise<ProfileBundle> {
+    return profileApi.getProfileBundle();
   }
 }
 

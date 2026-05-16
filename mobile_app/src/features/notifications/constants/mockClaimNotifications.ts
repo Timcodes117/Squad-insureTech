@@ -41,7 +41,7 @@ export const MOCK_CLAIM_NOTIFICATIONS: MockNotification[] = [
   {
     id: 'n4',
     title: 'Premium received',
-    body: 'Your first wallet top-up was recorded. The 72-hour hospital wait has started.',
+    body: 'Your first wallet top-up was recorded. The 3-day hospital wait has started.',
     timeLabel: '9:05 AM',
     dayLabel: 'Yesterday',
     tone: 'success',

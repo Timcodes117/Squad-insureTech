@@ -3,12 +3,16 @@ import { create } from 'zustand';
 import { secureStorage } from '@/core/storage/secureStorage';
 import { STORAGE_KEYS } from '@/core/storage/storageKeys';
 
+import { normalizeStoredDob } from './dobUtils';
+
 type PersistedDraft = {
   stepIndex: number;
   firstName: string;
   middleName: string;
   lastName: string;
   phoneDigits: string;
+  email: string;
+  dob: string;
   nin: string;
   bvn: string;
   gender: string | null;
@@ -26,6 +30,8 @@ export type RegistrationDraftState = PersistedDraft & {
   hydrate: () => Promise<void>;
   updateDraft: (patch: Partial<PersistedDraft>) => void;
   clearDraft: () => Promise<void>;
+  /** Wipe saved form fields but stay on the current step (after account is created). */
+  clearFormFields: (keepStepIndex: number) => Promise<void>;
   goToStep: (index: number) => void;
 };
 
@@ -35,6 +41,8 @@ const defaultPersist: PersistedDraft = {
   middleName: '',
   lastName: '',
   phoneDigits: '',
+  email: '',
+  dob: '',
   nin: '',
   bvn: '',
   gender: null,
@@ -54,6 +62,8 @@ function pickPersisted(s: RegistrationDraftState): PersistedDraft {
     middleName: s.middleName,
     lastName: s.lastName,
     phoneDigits: s.phoneDigits,
+    email: s.email,
+    dob: s.dob,
     nin: s.nin,
     bvn: s.bvn,
     gender: s.gender,
@@ -120,6 +130,9 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
       const lga = typeof parsed.lga === 'string' ? parsed.lga : '';
       const homeAddress = typeof parsed.homeAddress === 'string' ? parsed.homeAddress : '';
       const bvn = typeof parsed.bvn === 'string' ? parsed.bvn : '';
+      const email = typeof parsed.email === 'string' ? parsed.email : '';
+      const dobRaw = typeof parsed.dob === 'string' ? parsed.dob : '';
+      const dob = normalizeStoredDob(dobRaw);
       const password = typeof parsed.password === 'string' ? parsed.password : '';
       set({
         ...defaultPersist,
@@ -129,6 +142,8 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
         lga,
         homeAddress,
         bvn,
+        email,
+        dob,
         password,
         hydrated: true,
       });
@@ -148,6 +163,11 @@ export const useRegistrationDraftStore = create<RegistrationDraftState>((set, ge
   clearDraft: async () => {
     await secureStorage.removeItem(STORAGE_KEYS.registrationDraft);
     set({ ...defaultPersist, hydrated: true });
+  },
+
+  clearFormFields: async (keepStepIndex) => {
+    await secureStorage.removeItem(STORAGE_KEYS.registrationDraft);
+    set({ ...defaultPersist, stepIndex: keepStepIndex, hydrated: true });
   },
 
   goToStep: (index) => {

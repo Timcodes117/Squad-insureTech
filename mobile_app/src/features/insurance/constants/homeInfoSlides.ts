@@ -1,55 +1,61 @@
-import { formatNaira } from '@/shared/format/naira';
+import type { CoverJourneyPhase } from '@/features/insurance/mappers/dashboardMapper';
+import { WEEK_ONE_CAP_NAIRA } from '@/features/insurance/mappers/dashboardMapper';
 
 export type HomeInfoSlide = {
   id: string;
   title: string;
   body: string;
-  foot: string;
-  variant: 'brand' | 'neutral';
 };
 
-/** Manual swipe carousel below wallet/cover pager — neutral slides have no border on Home. */
+/** Short updates for the Home carousel — balances live on the wallet/cover cards above. */
 export function buildHomeInfoSlides(p: {
-  coverageRemainingNaira: number;
-  coverageCapNaira: number;
-  planLabel: string;
+  coverJourneyPhase?: CoverJourneyPhase;
+  weekOneEndsLabel?: string | null;
+  monthlyCapNaira?: number;
 }): HomeInfoSlide[] {
-  const { coverageRemainingNaira, coverageCapNaira, planLabel } = p;
-  return [
+  const { coverJourneyPhase, weekOneEndsLabel, monthlyCapNaira = 20_000 } = p;
+
+  const slides: HomeInfoSlide[] = [];
+
+  if (coverJourneyPhase === 'awaiting_funding') {
+    slides.push({
+      id: 'start',
+      title: 'Activate your cover',
+      body: 'Fund your wallet and pay your first weekly premium. Cover starts once payment is received.',
+    });
+  } else if (coverJourneyPhase === 'cooldown') {
+    slides.push({
+      id: 'activation',
+      title: '3-day activation',
+      body: 'Your account is activating. Wait 3 days after first premium before any hospital visit.',
+    });
+  } else if (coverJourneyPhase === 'week_one') {
+    slides.push({
+      id: 'first_week',
+      title: 'First-week limit',
+      body: weekOneEndsLabel
+        ? `You can visit hospitals now. ₦${WEEK_ONE_CAP_NAIRA.toLocaleString('en-NG')} in total for all visits until ${weekOneEndsLabel}, then ₦${monthlyCapNaira.toLocaleString('en-NG')} monthly.`
+        : `You can visit hospitals now. ₦${WEEK_ONE_CAP_NAIRA.toLocaleString('en-NG')} in total for your first week, then ₦${monthlyCapNaira.toLocaleString('en-NG')} monthly.`,
+    });
+  }
+
+  slides.push(
     {
-      id: 'cover_balance',
-      title: 'Cover balance',
-      body: `${formatNaira(coverageRemainingNaira)} left of ${formatNaira(coverageCapNaira)} for hospital help this period.`,
-      foot: `${planLabel} · Swipe above for wallet vs cover.`,
-      variant: 'brand',
+      id: 'how_it_works',
+      title: 'How it works',
+      body: 'Pay your weekly premium from your wallet. Use your cover at partner hospitals for eligible primary-care bills.',
     },
     {
-      id: 'monthly_cap',
-      title: 'Monthly hospital help',
-      body: `Up to ${formatNaira(coverageCapNaira)} per 30-day window for partner primary care—malaria, typhoid, consults, and more.`,
-      foot: 'Resets on your registration cycle.',
-      variant: 'neutral',
+      id: 'whats_covered',
+      title: 'What’s covered',
+      body: 'Everyday primary care—consultations, malaria, typhoid, and similar. Surgery and long hospital stays are not included.',
     },
     {
-      id: 'cooldown',
-      title: '72-hour unlock',
-      body: 'After your first wallet payment, your full monthly limit opens after 72 hours—fair cover without long dead periods.',
-      foot: 'Status on Home reflects demo timing.',
-      variant: 'neutral',
+      id: 'partner_hospitals',
+      title: 'Partner hospitals',
+      body: 'Only verified partner hospitals can bill BetaHealth. Check the list before you go and bring your member QR.',
     },
-    {
-      id: 'week_one',
-      title: 'First-week cap',
-      body: 'In week one, each claim is capped at ₦5,000 while your cover warms up—then the full monthly limit applies.',
-      foot: 'Also surfaced in alerts.',
-      variant: 'neutral',
-    },
-    {
-      id: 'covered_focus',
-      title: 'What we focus on',
-      body: 'Everyday primary-care bills—not surgery, maternity, or long inpatient stays. Open Coverage for the full included / excluded list.',
-      foot: 'Tap Cover in the tab bar.',
-      variant: 'neutral',
-    },
-  ];
+  );
+
+  return slides;
 }

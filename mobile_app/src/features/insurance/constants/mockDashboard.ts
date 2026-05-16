@@ -17,7 +17,7 @@ export function mockStatusHeadline(status: MockCoverStatus): string {
     case 'awaiting_funding':
       return 'Awaiting first payment';
     case 'cooldown':
-      return 'Cooldown — full cover soon';
+      return '3-day wait';
     default:
       return '';
   }
@@ -30,7 +30,7 @@ export function mockStatusDetail(status: MockCoverStatus, hoursLeft: number): st
     case 'awaiting_funding':
       return 'Fund your BetaHealth wallet to turn cover on.';
     case 'cooldown':
-      return `Full claim limit opens after 72 hours from first payment. About ${hoursLeft} hours left in demo.`;
+      return `Hospital visits unlock after a 3-day wait from first payment. About ${hoursLeft} hours left in demo.`;
     default:
       return '';
   }

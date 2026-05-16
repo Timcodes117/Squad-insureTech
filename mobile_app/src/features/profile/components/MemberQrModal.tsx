@@ -1,37 +1,46 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Image, Modal, Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-import { MOCK_DASHBOARD } from '@/features/insurance/constants/mockDashboard';
-import { MOCK_MEMBER_PROFILE, buildMemberQrPayload } from '@/features/profile/constants/mockMemberProfile';
+import { buildMemberQrPayload } from '@/features/profile/constants/mockMemberProfile';
 import { Text } from '@/shared/typography/Text';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  qrPayload?: string;
+  qrCodeDataUrl?: string;
+  membershipNumber?: string;
+  memberName?: string;
 };
 
 const INSTRUCTIONS = [
   'Show this code at the hospital front desk when you arrive.',
   'Staff scan it to confirm your cover and member ID—not for you to scan.',
-  'Turn brightness up. The code refreshes each time you open it (valid ~5 minutes in demo).',
+  'Turn brightness up on your screen before staff scan the code.',
 ] as const;
 
-export function MemberQrModal({ visible, onClose }: Props) {
-  const [payload, setPayload] = useState(() => buildMemberQrPayload());
+export function MemberQrModal({
+  visible,
+  onClose,
+  qrPayload,
+  qrCodeDataUrl,
+  membershipNumber,
+  memberName,
+}: Props) {
+  const [fallbackPayload, setFallbackPayload] = useState(() => buildMemberQrPayload());
 
   useEffect(() => {
-    if (!visible) {
+    if (!visible || qrPayload) {
       return;
     }
-    setPayload(
-      buildMemberQrPayload({
-        issuedAt: Date.now(),
-        coverStatus: MOCK_DASHBOARD.coverStatus,
-      }),
-    );
-  }, [visible]);
+    setFallbackPayload(buildMemberQrPayload({ issuedAt: Date.now() }));
+  }, [visible, qrPayload]);
+
+  const displayPayload = qrPayload ?? fallbackPayload;
+  const memberId = membershipNumber ?? '—';
+  const name = memberName ?? 'Member';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -45,12 +54,16 @@ export function MemberQrModal({ visible, onClose }: Props) {
           </View>
 
           <Text className="text-sm text-neutral-600">
-            {MOCK_MEMBER_PROFILE.name} · {MOCK_MEMBER_PROFILE.memberId}
+            {name} · {memberId}
           </Text>
-          <Text className="mt-1 text-xs text-neutral-400">Dynamic code · updates when you open this screen</Text>
+          <Text className="mt-1 text-xs text-neutral-400">Show this at partner hospital reception</Text>
 
           <View className="mt-5 items-center self-center rounded-2xl border border-neutral-200 bg-white p-5">
-            <QRCode value={payload} size={200} color="#171717" backgroundColor="#ffffff" />
+            {qrCodeDataUrl ? (
+              <Image source={{ uri: qrCodeDataUrl }} style={{ width: 200, height: 200 }} accessibilityIgnoresInvertColors />
+            ) : (
+              <QRCode value={displayPayload} size={200} color="#171717" backgroundColor="#ffffff" />
+            )}
           </View>
 
           <View className="mt-5 gap-2">

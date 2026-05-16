@@ -1,12 +1,23 @@
 import { create } from 'zustand';
 
+import type { BackendUser } from '@/types/backend';
+
 type AuthState = {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
+  user: BackendUser | null;
+  hydrated: boolean;
+  setUser: (user: BackendUser | null) => void;
+  setHydrated: (value: boolean) => void;
+  clearAuth: () => void;
 };
 
-// TODO: hydrate from secure storage on app start.
 export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
-  setAccessToken: (token) => set({ accessToken: token }),
+  user: null,
+  hydrated: false,
+  setUser: (user) => set({ user }),
+  setHydrated: (hydrated) => set({ hydrated }),
+  clearAuth: () => set({ user: null, hydrated: true }),
 }));
+
+export function useIsAuthenticated(): boolean {
+  return useAuthStore((s) => s.user !== null);
+}

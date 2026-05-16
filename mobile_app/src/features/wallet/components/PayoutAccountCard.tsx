@@ -1,5 +1,5 @@
 import { Building2, ChevronRight, Landmark } from 'lucide-react-native';
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 
 import { maskAccountNumber, useLinkedPayoutAccountStore } from '@/features/wallet/store/linkedPayoutAccountStore';
 import { Text } from '@/shared/typography/Text';
@@ -12,13 +12,29 @@ type Props = {
 
 export function PayoutAccountCard({ onConnectPress }: Props) {
   const account = useLinkedPayoutAccountStore((s) => s.account);
+  const clearAccount = useLinkedPayoutAccountStore((s) => s.clearAccount);
+
+  const confirmRemove = () => {
+    Alert.alert(
+      'Remove payout account?',
+      'You will need to connect a bank again before you can withdraw to your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => void clearAccount(),
+        },
+      ],
+    );
+  };
 
   if (!account) {
     return (
       <Pressable
         accessibilityRole="button"
         onPress={onConnectPress}
-        className="mx-5 mt-4 flex-row items-center gap-3 rounded-2xl border border-dashed border-brand-200 bg-brand-50/60 px-4 py-4 active:opacity-90"
+        className="mx-5 mt-4 flex-row items-center gap-3 rounded-2xl bg-neutral-100 px-4 py-4 active:opacity-90"
       >
         <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
           <Landmark size={20} color={BRAND} />
@@ -33,15 +49,20 @@ export function PayoutAccountCard({ onConnectPress }: Props) {
   }
 
   return (
-    <View className="mx-5 mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-4">
+    <View className="mx-5 mt-4 rounded-2xl bg-neutral-100 px-4 py-4">
       <View className="flex-row items-center justify-between">
         <Text className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Payout account</Text>
-        <Pressable accessibilityRole="button" onPress={onConnectPress} hitSlop={8}>
-          <Text className="text-sm font-semibold text-brand-600">Change</Text>
-        </Pressable>
+        <View className="flex-row items-center gap-3">
+          <Pressable accessibilityRole="button" onPress={confirmRemove} hitSlop={8}>
+            <Text className="text-sm font-semibold text-red-600">Remove</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onConnectPress} hitSlop={8}>
+            <Text className="text-sm font-semibold text-brand-600">Change</Text>
+          </Pressable>
+        </View>
       </View>
       <View className="mt-3 flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-neutral-100">
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-white">
           <Building2 size={20} color={BRAND} />
         </View>
         <View className="min-w-0 flex-1">

@@ -1,11 +1,16 @@
-import { apiClient } from '@/core/api/client';
+import { authApi } from '@/features/auth/api/auth.api';
+import { walletApi } from '@/features/wallet/api/wallet.api';
 
-import type { CoverageSummary } from '../types/insurance.types';
+import { claimsApi } from './claims.api';
+import { mapWalletToDashboard, type DashboardView } from '../mappers/dashboardMapper';
 
 export const insuranceApi = {
-  // TODO: GET /coverage (backend decides activation + limits).
-  getCoverage: async (): Promise<CoverageSummary> => {
-    void apiClient;
-    return { isActive: false, remainingBenefit: 0, renewalDate: null };
+  getDashboard: async (): Promise<DashboardView> => {
+    const [wallet, user, claimsPage] = await Promise.all([
+      walletApi.getWallet(),
+      authApi.getMe(),
+      claimsApi.list(1, 50).catch(() => ({ items: [], pagination: { page: 1, limit: 50, total: 0, pages: 1 } })),
+    ]);
+    return mapWalletToDashboard(wallet, user, claimsPage.items);
   },
 };

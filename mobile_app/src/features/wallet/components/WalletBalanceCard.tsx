@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Plus } from 'lucide-react-native';
 import { Pressable, View } from 'react-native';
 
-import { MOCK_WALLET } from '@/features/wallet/constants/mockWallet';
+import { fundAccountSubtitle } from '@/features/wallet/utils/fundDetails';
 import { formatNaira } from '@/shared/format/naira';
 import { Text } from '@/shared/typography/Text';
 
@@ -27,19 +27,23 @@ type WalletActions = {
 
 type Props = {
   balanceNaira: number;
+  virtualAccountNumber?: string | null;
+  bankName?: string | null;
 } & (HomeActions | WalletActions);
 
 export function WalletBalanceCard(props: Props) {
-  const { balanceNaira } = props;
+  const { balanceNaira, virtualAccountNumber, bankName } = props;
   const balanceVisible = props.variant === 'home' ? props.balanceVisible : true;
-  const maskedAccount = `•••• ${MOCK_WALLET.virtualAccountNumber.slice(-4)}`;
+  const accountLine = fundAccountSubtitle(virtualAccountNumber, bankName);
 
   return (
     <View className="overflow-hidden rounded-3xl bg-neutral-900 px-5 py-5">
       <View className="flex-row items-start justify-between">
-        <View>
+        <View className="min-w-0 flex-1 pr-2">
           <Text className="text-sm font-medium text-white/70">BetaHealth wallet</Text>
-          <Text className="mt-0.5 text-xs text-white/50">{maskedAccount}</Text>
+          <Text className="mt-0.5 text-xs leading-snug text-white/50" numberOfLines={2}>
+            {accountLine}
+          </Text>
         </View>
         {props.variant === 'wallet' ? (
           <Pressable

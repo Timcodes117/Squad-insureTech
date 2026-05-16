@@ -90,7 +90,7 @@ export function ConnectBankModal({ visible, onClose, onLinked }: Props) {
           {!saved ? (
             <>
               <Text className="text-sm leading-relaxed text-neutral-600">
-                Withdrawals go to this account. We verify the name matches your BetaHealth profile (demo).
+                Withdrawals are sent to this account. The name must match your BetaHealth profile.
               </Text>
 
               <View className="mt-5 gap-4">

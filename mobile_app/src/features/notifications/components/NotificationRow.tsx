@@ -1,13 +1,13 @@
 import { AlertCircle, CheckCircle2, Info } from 'lucide-react-native';
 import { Pressable, View } from 'react-native';
 
-import type { MockNotification } from '@/features/notifications/constants/mockClaimNotifications';
+import type { NotificationDisplay } from '@/features/notifications/api/notifications.api';
 import { Text } from '@/shared/typography/Text';
 
 const BRAND = '#2563eb';
 
 const toneMeta: Record<
-  MockNotification['tone'],
+  NotificationDisplay['tone'],
   { Icon: typeof Info; iconColor: string; tag: string; tagBg: string; tagText: string }
 > = {
   info: { Icon: Info, iconColor: BRAND, tag: 'Update', tagBg: 'bg-brand-50', tagText: 'text-brand-700' },
@@ -16,7 +16,7 @@ const toneMeta: Record<
 };
 
 type Props = {
-  item: MockNotification;
+  item: NotificationDisplay;
   bordered?: boolean;
   onPress?: () => void;
 };

@@ -38,7 +38,8 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for video if you choose to use it.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

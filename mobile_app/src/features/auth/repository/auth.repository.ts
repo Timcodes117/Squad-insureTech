@@ -1,17 +1,25 @@
 import { authApi } from '../api/auth.api';
-import type { AuthSession } from '../types/auth.types';
+import { persistAuthSession, registerAndPersist } from '../services/authSession';
+import type { AuthSession, RegisterPayload, RegisterResult, RequestOtpResult } from '../types/auth.types';
+import type { BackendUser } from '@/types/backend';
 
 class AuthRepository {
-  async login(): Promise<AuthSession> {
-    return authApi.login();
+  async requestOtp(identifier: string, password: string): Promise<RequestOtpResult> {
+    return authApi.requestOtp(identifier, password);
   }
 
-  async register(): Promise<AuthSession> {
-    return authApi.register();
+  async verifyOtp(identifier: string, code: string): Promise<AuthSession> {
+    const session = await authApi.verifyOtp(identifier, code);
+    await persistAuthSession(session);
+    return session;
   }
 
-  async verifyOtp(): Promise<AuthSession> {
-    return authApi.verifyOtp();
+  async register(payload: RegisterPayload): Promise<RegisterResult> {
+    return registerAndPersist(payload);
+  }
+
+  async getMe(): Promise<BackendUser> {
+    return authApi.getMe();
   }
 }
 

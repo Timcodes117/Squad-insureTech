@@ -1,9 +1,9 @@
 import { insuranceApi } from '../api/insurance.api';
-import type { CoverageSummary } from '../types/insurance.types';
+import type { DashboardView } from '../mappers/dashboardMapper';
 
 class InsuranceRepository {
-  async getCoverage(): Promise<CoverageSummary> {
-    return insuranceApi.getCoverage();
+  async getDashboard(): Promise<DashboardView> {
+    return insuranceApi.getDashboard();
   }
 }
 

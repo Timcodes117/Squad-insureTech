@@ -3,8 +3,19 @@ import { CreditCard, Hash, Phone } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
+import { getApiErrorMessage } from '@/core/api/unwrapResponse';
+import { useAuth, useRetryVirtualAccount } from '@/features/auth/hooks/useAuth';
 import { useHardwareBackHandler } from '@/features/auth/hooks/useHardwareBackHandler';
+import { MessageBanner } from '@/shared/ui/MessageBanner';
 import { Text } from '@/shared/typography/Text';
+import type { BackendUser } from '@/types/backend';
+
+import { buildRegisterPayload, isValidDobInput } from './buildRegisterPayload';
+import { DateOfBirthField } from './DateOfBirthField';
+import { formatIsoDateForDisplay } from './dobUtils';
+import { humanizeRegistrationError, humanizeVirtualAccountWarning } from './registrationErrors';
+import { hasFundableVirtualAccount, resolvePostRegisterStep } from './registrationOutcome';
+import { validateRegistrationDraft } from './validateRegistrationDraft';
 
 import { FaceConfirmationCamera } from './FaceConfirmationCamera';
 import { LabeledTextInput } from './LabeledTextInput';
@@ -15,10 +26,13 @@ import { RegistrationSelect } from './RegistrationSelect';
 import { RegistrationShell } from './RegistrationShell';
 import {
   GENDER_OPTIONS,
+  REGISTRATION_GENDER_OPTIONS,
   NIGERIAN_STATES,
   OCCUPATION_OPTIONS,
+  REGISTRATION_PROGRESS_TOTAL,
   REGISTRATION_STEPS,
   REGISTRATION_TOTAL_STEPS,
+  registrationProgressIndex,
   registrationStepIndex,
 } from './registrationConstants';
 import { useRegistrationDraftStore } from './registrationDraftStore';
@@ -33,9 +47,8 @@ function formatPhoneDisplay(digits: string) {
   return d;
 }
 
-function fakeWalletAccount(phoneDigits: string) {
-  const d = phoneDigits.replace(/\D/g, '').padStart(10, '0').slice(-10);
-  return `998${d.slice(0, 7)}${d.slice(7)}`;
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 export default function RegisterFlowScreen() {
@@ -44,6 +57,7 @@ export default function RegisterFlowScreen() {
   const hydrate = useRegistrationDraftStore((s) => s.hydrate);
   const updateDraft = useRegistrationDraftStore((s) => s.updateDraft);
   const clearDraft = useRegistrationDraftStore((s) => s.clearDraft);
+  const clearFormFields = useRegistrationDraftStore((s) => s.clearFormFields);
   const goToStep = useRegistrationDraftStore((s) => s.goToStep);
 
   const stepIndex = useRegistrationDraftStore((s) => s.stepIndex);
@@ -51,6 +65,8 @@ export default function RegisterFlowScreen() {
   const middleName = useRegistrationDraftStore((s) => s.middleName);
   const lastName = useRegistrationDraftStore((s) => s.lastName);
   const phoneDigits = useRegistrationDraftStore((s) => s.phoneDigits);
+  const email = useRegistrationDraftStore((s) => s.email);
+  const dob = useRegistrationDraftStore((s) => s.dob);
   const nin = useRegistrationDraftStore((s) => s.nin);
   const bvn = useRegistrationDraftStore((s) => s.bvn);
   const gender = useRegistrationDraftStore((s) => s.gender);
@@ -64,6 +80,16 @@ export default function RegisterFlowScreen() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [resendSec, setResendSec] = useState(0);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registeredUser, setRegisteredUser] = useState<BackendUser | null>(null);
+  const [vaWarning, setVaWarning] = useState<string | null>(null);
+  const registerStarted = useRef(false);
+  const accountCreatedRef = useRef(false);
+  const { register } = useAuth();
+  const retryVirtualAccount = useRetryVirtualAccount();
+  const walletIssueIdx = registrationStepIndex('wallet_setup_issue');
+  const walletIdx = registrationStepIndex('wallet');
+  const successIdx = registrationStepIndex('success');
 
   const reviewPassword = savedPassword || password;
 
@@ -85,17 +111,54 @@ export default function RegisterFlowScreen() {
   }, [stepMeta.id, savedPassword]);
 
   const creatingIdx = registrationStepIndex('creating');
-  const walletIdx = registrationStepIndex('wallet');
+
+  const dismissReviewError = useCallback(() => {
+    setRegisterError(null);
+  }, []);
 
   useEffect(() => {
-    if (stepIndex !== creatingIdx) {
+    if (stepIndex !== creatingIdx || registerStarted.current) {
       return;
     }
-    const timer = setTimeout(() => {
-      updateDraft({ stepIndex: walletIdx });
-    }, 2400);
-    return () => clearTimeout(timer);
-  }, [stepIndex, updateDraft, creatingIdx, walletIdx]);
+    registerStarted.current = true;
+    setRegisterError(null);
+    const draft = useRegistrationDraftStore.getState();
+    const validationMessage = validateRegistrationDraft(draft);
+    if (validationMessage) {
+      setRegisterError(validationMessage);
+      registerStarted.current = false;
+      updateDraft({ stepIndex: registrationStepIndex('review') });
+      return;
+    }
+    void (async () => {
+      try {
+        const payload = buildRegisterPayload(draft);
+        if (!payload) {
+          setRegisterError('Some details are missing or invalid. Please review each step.');
+          registerStarted.current = false;
+          updateDraft({ stepIndex: registrationStepIndex('review') });
+          return;
+        }
+        const result = await register.mutateAsync(payload);
+        setRegisteredUser(result.user);
+        const friendlyWarning = humanizeVirtualAccountWarning(result.virtualAccountWarning);
+        setVaWarning(friendlyWarning);
+        accountCreatedRef.current = true;
+        const nextStep = resolvePostRegisterStep(result);
+        const targetIdx = nextStep === 'wallet' ? walletIdx : walletIssueIdx;
+        await clearFormFields(targetIdx);
+        setPassword('');
+        setPasswordConfirm('');
+        setOtpInput('');
+        updateDraft({ stepIndex: targetIdx });
+      } catch (e) {
+        accountCreatedRef.current = false;
+        setRegisterError(humanizeRegistrationError(getApiErrorMessage(e)));
+        registerStarted.current = false;
+        updateDraft({ stepIndex: registrationStepIndex('review') });
+      }
+    })();
+  }, [stepIndex, updateDraft, creatingIdx, walletIdx, walletIssueIdx, register, clearFormFields]);
 
   const isOtpStep = REGISTRATION_STEPS[stepIndex]?.id === 'otp';
 
@@ -113,7 +176,16 @@ export default function RegisterFlowScreen() {
     return () => clearInterval(t);
   }, [isOtpStep, resendSec]);
 
-  const walletNumber = useMemo(() => fakeWalletAccount(phoneDigits), [phoneDigits]);
+  const walletNumber = registeredUser?.virtualAccountNumber?.trim() ?? '';
+  const walletBank = registeredUser?.virtualAccountBankName ?? 'Partner bank';
+  const canShowWalletReady = hasFundableVirtualAccount(registeredUser ?? {});
+
+  useEffect(() => {
+    if (stepMeta.id !== 'wallet' || canShowWalletReady) {
+      return;
+    }
+    updateDraft({ stepIndex: walletIssueIdx });
+  }, [stepMeta.id, canShowWalletReady, updateDraft, walletIssueIdx]);
 
   const displayFullName = useMemo(
     () => [firstName, middleName, lastName].map((s) => s.trim()).filter(Boolean).join(' '),
@@ -144,8 +216,10 @@ export default function RegisterFlowScreen() {
     if (stepMeta.id === 'creating' || stepMeta.id === 'success') {
       return;
     }
-    if (stepMeta.id === 'wallet') {
-      updateDraft({ stepIndex: registrationStepIndex('review') });
+    if (accountCreatedRef.current) {
+      return;
+    }
+    if (stepMeta.id === 'wallet' || stepMeta.id === 'wallet_setup_issue') {
       return;
     }
     const nextIndex = stepIndex - 1;
@@ -166,6 +240,10 @@ export default function RegisterFlowScreen() {
         const d = phoneDigits.replace(/\D/g, '');
         return d.length >= 10 && d.length <= 11;
       }
+      case 'email':
+        return isValidEmail(email);
+      case 'dob':
+        return isValidDobInput(dob);
       case 'otp':
         return otpInput.replace(/\D/g, '').length === 6;
       case 'password': {
@@ -181,7 +259,7 @@ export default function RegisterFlowScreen() {
         return n.length === 11;
       }
       case 'gender':
-        return Boolean(gender);
+        return gender === 'male' || gender === 'female';
       case 'location':
         return Boolean(state) && lga.trim().length >= 2 && homeAddress.trim().length >= 5;
       case 'bvn': {
@@ -195,6 +273,8 @@ export default function RegisterFlowScreen() {
       case 'creating':
         return false;
       case 'wallet':
+        return canShowWalletReady;
+      case 'wallet_setup_issue':
         return true;
       case 'success':
         return true;
@@ -206,6 +286,8 @@ export default function RegisterFlowScreen() {
     firstName,
     lastName,
     phoneDigits,
+    email,
+    dob,
     otpInput,
     password,
     passwordConfirm,
@@ -216,6 +298,7 @@ export default function RegisterFlowScreen() {
     lga,
     homeAddress,
     occupationId,
+    canShowWalletReady,
   ]);
 
   const onPrimaryPress = useCallback(() => {
@@ -224,6 +307,12 @@ export default function RegisterFlowScreen() {
         goNext();
         break;
       case 'phone':
+        goNext();
+        break;
+      case 'email':
+        goNext();
+        break;
+      case 'dob':
         goNext();
         break;
       case 'otp':
@@ -239,15 +328,21 @@ export default function RegisterFlowScreen() {
         goNext();
         break;
       case 'review':
+        registerStarted.current = false;
+        setRegisterError(null);
         updateDraft({ stepIndex: registrationStepIndex('creating') });
         break;
       case 'wallet':
-        goNext();
+      case 'wallet_setup_issue':
+        goToStep(successIdx);
         break;
       case 'success':
         void (async () => {
-          setPassword('');
-          setPasswordConfirm('');
+          accountCreatedRef.current = false;
+          registerStarted.current = false;
+          setRegisteredUser(null);
+          setVaWarning(null);
+          setRegisterError(null);
           await clearDraft();
           router.replace('/(tabs)/home');
         })();
@@ -255,9 +350,14 @@ export default function RegisterFlowScreen() {
       default:
         goNext();
     }
-  }, [stepMeta.id, goNext, updateDraft, router, clearDraft, password, setPassword, setPasswordConfirm]);
+  }, [stepMeta.id, goNext, goToStep, updateDraft, router, clearDraft, successIdx, password]);
 
-  const showBack = stepMeta.id !== 'creating' && stepMeta.id !== 'success';
+  const showBack =
+    !accountCreatedRef.current &&
+    stepMeta.id !== 'creating' &&
+    stepMeta.id !== 'success' &&
+    stepMeta.id !== 'wallet' &&
+    stepMeta.id !== 'wallet_setup_issue';
   const scrollable = stepMeta.id !== 'face_scan';
 
   if (!hydrated) {
@@ -274,16 +374,18 @@ export default function RegisterFlowScreen() {
       ? 'Done'
       : stepMeta.id === 'wallet'
         ? 'Continue'
-        : stepMeta.id === 'review'
-          ? 'Create account'
-          : 'Continue';
+        : stepMeta.id === 'wallet_setup_issue'
+          ? 'Continue to app'
+          : stepMeta.id === 'review'
+            ? 'Create account'
+            : 'Continue';
 
   const footer =
     stepMeta.id === 'face_scan' || stepMeta.id === 'creating' ? null : (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={footerContinueLabel}
-        disabled={!canContinue && stepMeta.id !== 'wallet'}
+        disabled={!canContinue && stepMeta.id !== 'wallet' && stepMeta.id !== 'wallet_setup_issue'}
         onPress={onPrimaryPress}
         className="mb-2 w-full items-center rounded-xl py-4 active:opacity-90"
         style={{
@@ -297,8 +399,8 @@ export default function RegisterFlowScreen() {
 
   return (
     <RegistrationShell
-      stepIndex={stepIndex}
-      totalSteps={REGISTRATION_TOTAL_STEPS}
+      stepIndex={registrationProgressIndex(stepMeta.id)}
+      totalSteps={REGISTRATION_PROGRESS_TOTAL}
       onBack={handleBack}
       showBack={showBack}
       footer={footer}
@@ -342,6 +444,26 @@ export default function RegisterFlowScreen() {
             <Text className="text-xs leading-relaxed text-neutral-500">We will send a code by SMS, then you will create a password on the next step.</Text>
           </View>
         ) : null}
+
+        {stepMeta.id === 'email' ? (
+          <LabeledTextInput
+            label="Email address"
+            required
+            value={email}
+            onChangeText={(t) => {
+              updateDraft({ email: t });
+              dismissReviewError();
+            }}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
+            accessibilityLabel="Email address"
+          />
+        ) : null}
+
+        {stepMeta.id === 'dob' ? <DateOfBirthField value={dob} onChange={(iso) => updateDraft({ dob: iso })} /> : null}
 
         {stepMeta.id === 'otp' ? (
           <View className="gap-5">
@@ -425,7 +547,7 @@ export default function RegisterFlowScreen() {
         {stepMeta.id === 'gender' ? (
           <RadioTileGroup
             accessibilityLabel="Gender"
-            options={GENDER_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+            options={REGISTRATION_GENDER_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
             value={gender}
             onChange={(id) => updateDraft({ gender: id })}
           />
@@ -492,15 +614,28 @@ export default function RegisterFlowScreen() {
 
         {stepMeta.id === 'review' ? (
           <View className="gap-3">
+            {registerError ? (
+              <MessageBanner variant="error" title="Could not create account" message={registerError} />
+            ) : null}
             <ReviewRow label="Name" value={displayFullName || '—'} onEdit={() => goToStep(registrationStepIndex('full_name'))} />
             <ReviewRow label="Phone" value={`+234 ${formatPhoneDisplay(phoneDigits)}`} onEdit={() => goToStep(registrationStepIndex('phone'))} />
+            <ReviewRow label="Email" value={email.trim() || '—'} onEdit={() => goToStep(registrationStepIndex('email'))} />
+            <ReviewRow
+              label="Date of birth"
+              value={dob.trim() ? formatIsoDateForDisplay(dob) : '—'}
+              onEdit={() => goToStep(registrationStepIndex('dob'))}
+            />
             <ReviewRow
               label="Password"
               value={reviewPassword.length >= 8 ? '••••••••' : '—'}
               onEdit={() => goToStep(registrationStepIndex('password'))}
             />
             <ReviewRow label="NIN" value={nin.replace(/\D/g, '')} onEdit={() => goToStep(registrationStepIndex('nin'))} />
-            <ReviewRow label="Gender" value={GENDER_OPTIONS.find((g) => g.id === gender)?.label ?? '—'} onEdit={() => goToStep(registrationStepIndex('gender'))} />
+            <ReviewRow
+              label="Gender"
+              value={REGISTRATION_GENDER_OPTIONS.find((g) => g.id === gender)?.label ?? '—'}
+              onEdit={() => goToStep(registrationStepIndex('gender'))}
+            />
             <ReviewRow
               label="Location"
               value={[state, lga.trim(), homeAddress.trim()].filter(Boolean).join(' · ') || '—'}
@@ -523,25 +658,93 @@ export default function RegisterFlowScreen() {
           </View>
         ) : null}
 
-        {stepMeta.id === 'wallet' ? (
+        {stepMeta.id === 'wallet' && canShowWalletReady ? (
           <View className="gap-4 py-2">
+            <MessageBanner
+              variant="success"
+              title="Wallet ready"
+              message="Your funding account is set up. Save these details and transfer from your bank app to activate cover."
+            />
             <Text className="text-sm font-medium text-neutral-500">BetaHealth virtual account</Text>
             <Text className="text-2xl font-bold tracking-wide text-neutral-900">{walletNumber}</Text>
-            <Text className="text-base text-neutral-600">Partner bank (Squad)</Text>
+            <Text className="text-base text-neutral-600">{walletBank}</Text>
             <Text className="text-xs leading-relaxed text-neutral-500">
-              Fund this account from your bank app. After registration you can choose your health plan and payment schedule from the home screen.
+              Fund this account from your bank app. You can manage your plan from the home screen.
             </Text>
+          </View>
+        ) : null}
+
+        {stepMeta.id === 'wallet_setup_issue' ? (
+          <View className="gap-4 py-2">
+            {vaWarning ? (
+              <MessageBanner variant="error" title="Funding account not ready" message={vaWarning} />
+            ) : (
+              <MessageBanner
+                variant="error"
+                title="Funding account not ready"
+                message="We saved your profile, but your bank account number is not ready yet. Check that your BVN, full name, and date of birth match your bank records."
+              />
+            )}
+            <Text className="text-sm leading-relaxed text-neutral-600">
+              You can open the app and try again from your Wallet tab after confirming your details with your bank.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Try setting up funding account again"
+              disabled={retryVirtualAccount.isPending}
+              onPress={() => {
+                void (async () => {
+                  try {
+                    const user = await retryVirtualAccount.mutateAsync();
+                    setRegisteredUser(user);
+                    if (hasFundableVirtualAccount(user)) {
+                      setVaWarning(null);
+                      setRegisteredUser(user);
+                      updateDraft({ stepIndex: walletIdx });
+                    } else {
+                      setVaWarning(
+                        'Your funding account is still not ready. Confirm your BVN, name, and date of birth match your bank, then try again.',
+                      );
+                    }
+                  } catch (e) {
+                    setVaWarning(humanizeRegistrationError(getApiErrorMessage(e)));
+                  }
+                })();
+              }}
+              className="items-center rounded-xl border border-brand-600 bg-white py-3.5 active:opacity-90"
+            >
+              {retryVirtualAccount.isPending ? (
+                <ActivityIndicator color={CONTINUE_ACCENT} />
+              ) : (
+                <Text className="text-base font-semibold text-brand-700">Try again</Text>
+              )}
+            </Pressable>
           </View>
         ) : null}
 
         {stepMeta.id === 'success' ? (
           <View className="items-center gap-4 py-10">
+            <MessageBanner
+              variant="success"
+              title="Account created"
+              message={
+                registeredUser?.fullName
+                  ? `Welcome, ${registeredUser.fullName.split(/\s+/)[0] ?? 'member'}. Your profile is saved on our servers.`
+                  : 'Your profile is saved. You can fund your wallet from the home screen.'
+              }
+            />
             <View className="h-20 w-20 items-center justify-center rounded-full bg-brand-100">
               <Text className="text-4xl">✓</Text>
             </View>
             <Text className="text-center text-base leading-relaxed text-neutral-600">
-              Welcome to BetaHealth. Choose your plan and fund your wallet from the home screen when you are ready.
+              Choose your plan and fund your wallet from the home screen when you are ready.
             </Text>
+            {registeredUser?.virtualAccountNumber ? (
+              <Text className="text-center text-xs text-neutral-500">
+                Funding account {registeredUser.virtualAccountNumber}
+                {registeredUser.virtualAccountBankName ? ` · ${registeredUser.virtualAccountBankName}` : ''}
+              </Text>
+            ) : null}
           </View>
         ) : null}
       </View>

@@ -1,6 +1,9 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { Home, Shield, User, Wallet } from 'lucide-react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuthStore } from '@/store/authStore';
 
 const TAB_ACTIVE = '#2563eb';
 const TAB_INACTIVE = '#a3a3a3';
@@ -9,6 +12,20 @@ const ICON = 20;
 export default function TabsGroupLayout() {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 10);
+  const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
+
+  if (!hydrated) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator size="large" color={TAB_ACTIVE} />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <Tabs

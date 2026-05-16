@@ -1,16 +1,17 @@
 import { useRouter } from 'expo-router';
-import { Building2, Copy, MoreHorizontal } from 'lucide-react-native';
+import { MoreHorizontal } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Share, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MOCK_LEDGER } from '@/features/transactions/constants/mockLedger';
+import { usePullToRefresh, refetchAll } from '@/core/hooks/usePullToRefresh';
 import { ConnectBankModal } from '@/features/wallet/components/ConnectBankModal';
 import { LedgerActivityRow } from '@/features/wallet/components/LedgerActivityRow';
 import { PayoutAccountCard } from '@/features/wallet/components/PayoutAccountCard';
+import { VirtualAccountDetailsCard } from '@/features/wallet/components/VirtualAccountDetailsCard';
 import { WalletBalanceCard } from '@/features/wallet/components/WalletBalanceCard';
-import { WithdrawToBankModal } from '@/features/wallet/components/WithdrawToBankModal';
-import { MOCK_WALLET } from '@/features/wallet/constants/mockWallet';
+import { useTransactions } from '@/features/transactions/hooks/useTransactions';
+import { useWallet, useWithdrawable } from '@/features/wallet/hooks/useWallet';
 import { useLinkedPayoutAccountStore } from '@/features/wallet/store/linkedPayoutAccountStore';
 import {
   filterWalletHistory,
@@ -18,81 +19,81 @@ import {
   type WalletHistoryTab,
 } from '@/features/wallet/utils/walletHistory';
 import { Text } from '@/shared/typography/Text';
+import { useAuthStore } from '@/store/authStore';
+import { buildFundDetailsMessage } from '@/features/wallet/utils/fundDetails';
 
 const BRAND = '#2563eb';
 
 const HISTORY_TABS: { id: WalletHistoryTab; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'funded', label: 'Funded' },
+  { id: 'premiums', label: 'Premiums' },
   { id: 'withdraws', label: 'Withdraws' },
 ];
 
 export default function WalletScreen() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const hydratePayout = useLinkedPayoutAccountStore((s) => s.hydrate);
   const payoutAccount = useLinkedPayoutAccountStore((s) => s.account);
   const payoutHydrated = useLinkedPayoutAccountStore((s) => s.hydrated);
 
+  const { data: wallet, isLoading: walletLoading, refetch: refetchWallet } = useWallet();
+  const { data: ledger, isLoading: ledgerLoading, refetch: refetchTransactions } = useTransactions();
+  const { data: withdrawable, refetch: refetchWithdrawable } = useWithdrawable();
+
+  const onRefresh = useCallback(
+    () => refetchAll(() => refetchWallet(), () => refetchTransactions(), () => refetchWithdrawable()),
+    [refetchWallet, refetchTransactions, refetchWithdrawable],
+  );
+  const { refreshControl } = usePullToRefresh(onRefresh);
+
   const [historyTab, setHistoryTab] = useState<WalletHistoryTab>('all');
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawAfterLink, setWithdrawAfterLink] = useState(false);
-  const [amountText, setAmountText] = useState('');
-  const [withdrawDone, setWithdrawDone] = useState(false);
 
-  const balance = MOCK_WALLET.balanceNaira;
+  const balance = wallet?.balanceNaira ?? 0;
 
-  const parsedAmount = useMemo(() => {
-    const n = Number(amountText.replace(/\D/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  }, [amountText]);
-
-  const canSubmitWithdraw = parsedAmount > 0 && parsedAmount <= balance;
-
-  const filteredHistory = useMemo(() => filterWalletHistory(MOCK_LEDGER, historyTab), [historyTab]);
+  const filteredHistory = useMemo(() => filterWalletHistory(ledger ?? [], historyTab), [ledger, historyTab]);
   const groupedHistory = useMemo(() => groupWalletHistoryByDay(filteredHistory), [filteredHistory]);
 
   useEffect(() => {
     void hydratePayout();
   }, [hydratePayout]);
 
+  const fundAccountName = wallet?.fundingAccountName ?? user?.fullName ?? null;
+
   const shareAccount = useCallback(async () => {
+    const num = wallet?.virtualAccountNumber?.trim();
+    if (!wallet || !num || num === '—') {
+      return;
+    }
     try {
       await Share.share({
-        message: `BetaHealth virtual account\n${MOCK_WALLET.virtualAccountNumber}\n${MOCK_WALLET.bankName}`,
-        title: 'BetaHealth account',
+        message: buildFundDetailsMessage({
+          accountNumber: num,
+          bankName: wallet.bankName,
+          accountName: fundAccountName,
+        }),
+        title: 'BetaHealth fund details',
       });
     } catch {
       // dismissed
     }
-  }, []);
-
-  const closeWithdraw = () => {
-    setWithdrawOpen(false);
-    setAmountText('');
-    setWithdrawDone(false);
-  };
+  }, [wallet, fundAccountName]);
 
   const openWithdrawFlow = () => {
-    if (!payoutAccount) {
-      setWithdrawAfterLink(true);
-      setConnectOpen(true);
-      return;
-    }
-    setWithdrawOpen(true);
-  };
-
-  const onBankLinked = () => {
-    if (withdrawAfterLink) {
-      setWithdrawAfterLink(false);
-      setWithdrawOpen(true);
-    }
+    router.push('/withdraw');
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 28 }}
+        refreshControl={refreshControl}
+      >
         <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
           <View className="w-10" />
           <Text className="text-lg font-bold text-neutral-900">My Wallet</Text>
@@ -107,36 +108,33 @@ export default function WalletScreen() {
           </Pressable>
         </View>
 
-        <View className="mx-5 mt-4">
-          <WalletBalanceCard
-            variant="wallet"
-            balanceNaira={balance}
-            onTopUpPress={() => void shareAccount()}
-            onWithdrawPress={openWithdrawFlow}
-          />
-        </View>
-
-        <View className="mx-5 mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-4">
-          <View className="flex-row items-center gap-3">
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
-              <Building2 size={20} color={BRAND} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs font-medium text-neutral-500">Fund via transfer</Text>
-              <Text className="mt-0.5 text-base font-bold tracking-wide text-neutral-900">{MOCK_WALLET.virtualAccountNumber}</Text>
-              <Text className="text-sm text-neutral-600">{MOCK_WALLET.bankName}</Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Share account details"
-              onPress={() => void shareAccount()}
-              hitSlop={8}
-              className="h-9 w-9 items-center justify-center rounded-full border border-neutral-200 active:bg-neutral-50"
-            >
-              <Copy size={18} color={BRAND} />
-            </Pressable>
+        {walletLoading ? (
+          <View className="items-center py-12">
+            <ActivityIndicator size="large" color={BRAND} />
           </View>
-        </View>
+        ) : (
+          <>
+            <View className="mx-5 mt-4">
+              <WalletBalanceCard
+                variant="wallet"
+                balanceNaira={balance}
+                virtualAccountNumber={wallet?.virtualAccountNumber}
+                bankName={wallet?.bankName}
+                onTopUpPress={() => void shareAccount()}
+                onWithdrawPress={openWithdrawFlow}
+              />
+            </View>
+
+            <View className="mx-5 mt-4">
+              <VirtualAccountDetailsCard
+                accountNumber={wallet?.virtualAccountNumber ?? '—'}
+                bankName={wallet?.bankName ?? 'Partner bank'}
+                accountName={fundAccountName}
+                helperText="Send a transfer from your bank app using the details below. Use the account name exactly as shown so your bank accepts the payment."
+              />
+            </View>
+          </>
+        )}
 
         {payoutHydrated ? <PayoutAccountCard onConnectPress={() => setConnectOpen(true)} /> : null}
 
@@ -165,7 +163,9 @@ export default function WalletScreen() {
         </View>
 
         <View className="mt-2 px-5">
-          {groupedHistory.length === 0 ? (
+          {ledgerLoading ? (
+            <ActivityIndicator className="py-8" color={BRAND} />
+          ) : groupedHistory.length === 0 ? (
             <Text className="py-8 text-center text-sm text-neutral-500">No transactions in this filter yet.</Text>
           ) : (
             groupedHistory.map((group) => (
@@ -210,29 +210,7 @@ export default function WalletScreen() {
         </Pressable>
       </Modal>
 
-      <ConnectBankModal
-        visible={connectOpen}
-        onClose={() => {
-          setConnectOpen(false);
-          setWithdrawAfterLink(false);
-        }}
-        onLinked={onBankLinked}
-      />
-
-      {payoutAccount ? (
-        <WithdrawToBankModal
-          visible={withdrawOpen}
-          balanceNaira={balance}
-          payoutAccount={payoutAccount}
-          amountText={amountText}
-          onChangeAmount={setAmountText}
-          done={withdrawDone}
-          parsedAmount={parsedAmount}
-          canSubmit={canSubmitWithdraw}
-          onClose={closeWithdraw}
-          onConfirm={() => canSubmitWithdraw && setWithdrawDone(true)}
-        />
-      ) : null}
+      <ConnectBankModal visible={connectOpen} onClose={() => setConnectOpen(false)} />
     </SafeAreaView>
   );
 }

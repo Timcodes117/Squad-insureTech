@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react';
+import type { RefreshControlProps } from 'react-native';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, ChevronLeft } from 'lucide-react-native';
@@ -15,6 +16,7 @@ type Props = PropsWithChildren<{
   onNotificationPress?: () => void;
   scrollable?: boolean;
   footer?: ReactNode;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 }>;
 
 export function DashboardScreenShell({
@@ -26,6 +28,7 @@ export function DashboardScreenShell({
   onNotificationPress,
   scrollable = true,
   footer,
+  refreshControl,
 }: Props) {
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-4 pt-2">
@@ -68,6 +71,7 @@ export function DashboardScreenShell({
       contentContainerStyle={{ paddingBottom: footer ? 16 : 32 }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>

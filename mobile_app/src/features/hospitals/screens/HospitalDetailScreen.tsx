@@ -107,7 +107,7 @@ export default function HospitalDetailScreen() {
           <Text className="mt-2 text-sm leading-relaxed text-neutral-600">
             {coverActive
               ? 'Cover is active. Show your member QR at the front desk so staff can confirm your plan.'
-              : `Cover status: ${mockStatusHeadline(coverStatus)}. Pay your first premium and complete the 72-hour wait before visiting.`}
+              : `Cover status: ${mockStatusHeadline(coverStatus)}. Pay your first premium and complete the 3-day wait before visiting.`}
           </Text>
           <Pressable
             accessibilityRole="button"

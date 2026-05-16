@@ -16,6 +16,20 @@ export const REGISTRATION_STEPS = [
     voiceLine: 'Enter the phone number you use.',
   },
   {
+    id: 'email',
+    progressLabel: 'Email',
+    title: 'Your email address',
+    subtitle: 'We use it for account recovery and important updates about your cover.',
+    voiceLine: 'Enter your email address.',
+  },
+  {
+    id: 'dob',
+    progressLabel: 'Birthday',
+    title: 'Your date of birth',
+    subtitle: 'Enter your birth date as on your ID. Use day, month, and year.',
+    voiceLine: 'Enter your date of birth.',
+  },
+  {
     id: 'otp',
     progressLabel: 'Code',
     title: 'Enter your code',
@@ -101,6 +115,13 @@ export const REGISTRATION_STEPS = [
     voiceLine: 'Your health wallet is ready. Note your account number.',
   },
   {
+    id: 'wallet_setup_issue',
+    progressLabel: 'Account',
+    title: 'Account created',
+    subtitle: 'Your BetaHealth profile is saved. We still need to verify your bank details before your funding account is ready.',
+    voiceLine: 'Your account was created, but your funding account is not ready yet. You can fix your details and try again.',
+  },
+  {
     id: 'success',
     progressLabel: 'Done',
     title: 'You are all set',
@@ -113,8 +134,21 @@ export type RegistrationStepId = (typeof REGISTRATION_STEPS)[number]['id'];
 
 export const REGISTRATION_TOTAL_STEPS = REGISTRATION_STEPS.length;
 
+/** Linear progress bar — `wallet_setup_issue` is branched to, not the next step after `wallet`. */
+export const REGISTRATION_PROGRESS_STEPS = REGISTRATION_STEPS.filter((s) => s.id !== 'wallet_setup_issue');
+
+export const REGISTRATION_PROGRESS_TOTAL = REGISTRATION_PROGRESS_STEPS.length;
+
 export function registrationStepIndex(id: RegistrationStepId): number {
   const i = REGISTRATION_STEPS.findIndex((s) => s.id === id);
+  return i >= 0 ? i : 0;
+}
+
+export function registrationProgressIndex(stepId: RegistrationStepId): number {
+  if (stepId === 'wallet_setup_issue') {
+    return Math.max(0, REGISTRATION_PROGRESS_STEPS.length - 1);
+  }
+  const i = REGISTRATION_PROGRESS_STEPS.findIndex((s) => s.id === stepId);
   return i >= 0 ? i : 0;
 }
 
@@ -127,6 +161,12 @@ export const GENDER_OPTIONS = [
   { id: 'female', label: 'Female' },
   { id: 'male', label: 'Male' },
   { id: 'prefer_not', label: 'Prefer not to say' },
+] as const;
+
+/** Registration API only accepts male | female (must match bank / BVN records). */
+export const REGISTRATION_GENDER_OPTIONS = [
+  { id: 'female', label: 'Female' },
+  { id: 'male', label: 'Male' },
 ] as const;
 
 export const PAYMENT_OPTIONS = [

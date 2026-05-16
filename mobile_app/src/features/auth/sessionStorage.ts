@@ -1,9 +1,13 @@
 import { secureStorage } from '@/core/storage/secureStorage';
 import { STORAGE_KEYS } from '@/core/storage/storageKeys';
 
-export async function readHasSession(): Promise<boolean> {
+export async function readSessionToken(): Promise<string | null> {
   const token = await secureStorage.getItem(STORAGE_KEYS.authSession);
-  return Boolean(token && token.length > 0);
+  return token && token.length > 0 ? token : null;
+}
+
+export async function readHasSession(): Promise<boolean> {
+  return Boolean(await readSessionToken());
 }
 
 /** Persist only a real session token returned from your auth API. */

@@ -1,12 +1,15 @@
-import type { PropsWithChildren } from 'react';
-import { Text as RNText } from 'react-native';
+import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
-type Props = PropsWithChildren<{
+type Props = RNTextProps & {
   className?: string;
-}>;
+};
 
 // TODO: typography tokens (sizes/weights) via NativeWind theme extension.
 
-export function Text({ children, className }: Props) {
-  return <RNText className={className}>{children}</RNText>;
+export function Text({ children, className, ...rest }: Props) {
+  return (
+    <RNText className={className} {...rest}>
+      {children}
+    </RNText>
+  );
 }

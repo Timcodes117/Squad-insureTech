@@ -1,14 +1,17 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, StatusBar, Text as RNText, useWindowDimensions, View } from 'react-native';
+import { Image, Text as RNText, useWindowDimensions, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingDecorBackground } from '@/features/onboarding/components/OnboardingDecorBackground';
 import { LandingHeroMarquee } from '@/features/onboarding/components/LandingHeroMarquee';
 import { clearLegacyPlaceholderSession } from '@/features/auth/sessionStorage';
+import { hydrateAuthFromStorage } from '@/features/auth/services/authSession';
 import { Button } from '@/shared/ui/Button';
 import { Text } from '@/shared/typography/Text';
+import { useAuthStore } from '@/store/authStore';
 import { useOnboardingStore } from '@/store/onboardingStore';
 
 const MIN_SPLASH_MS = 950;
@@ -16,7 +19,7 @@ const LOGO = require('../../../../assets/icon.png');
 /** Horizontal padding from `px-6` (24pt each side). */
 const LANDING_PAD_X = 24 * 2;
 
-type Phase = 'splash' | 'landing';
+type Phase = 'splash' | 'landing' | 'routing';
 
 export default function AppIndexScreen() {
   const router = useRouter();
@@ -38,7 +41,9 @@ export default function AppIndexScreen() {
       const started = startedAt.current;
       await clearLegacyPlaceholderSession();
       await hydrateFromStorage();
+      await hydrateAuthFromStorage();
 
+      const hasSession = useAuthStore.getState().user !== null;
       const elapsed = Date.now() - started;
       const wait = Math.max(0, MIN_SPLASH_MS - elapsed);
       if (wait > 0) {
@@ -47,15 +52,29 @@ export default function AppIndexScreen() {
       if (cancelled) {
         return;
       }
+
+      if (hasSession) {
+        setPhase('routing');
+        router.replace('/(tabs)/home');
+        return;
+      }
+
+      const onboardingDone = useOnboardingStore.getState().completed;
+      if (!onboardingDone) {
+        setPhase('routing');
+        router.replace('/(onboarding)/flow');
+        return;
+      }
+
       setPhase('landing');
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [hydrateFromStorage]);
+  }, [hydrateFromStorage, router]);
 
-  if (phase === 'splash') {
+  if (phase === 'splash' || phase === 'routing') {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <Animated.View entering={FadeIn.duration(520)} exiting={FadeOut.duration(200)}>
@@ -104,7 +123,12 @@ export default function AppIndexScreen() {
 
         <View className="gap-3 px-6 pb-6">
           <Button title="Register" variant="accent" onPress={() => router.push('/(onboarding)/flow')} />
-          <Button title="I already have an account" variant="outline" className='rounded-[50px] py-3' onPress={() => router.push('/(auth)/login')} />
+          <Button
+            title="I already have an account"
+            variant="outline"
+            className="rounded-[50px] py-3"
+            onPress={() => router.push('/(auth)/login')}
+          />
         </View>
       </View>
     </SafeAreaView>

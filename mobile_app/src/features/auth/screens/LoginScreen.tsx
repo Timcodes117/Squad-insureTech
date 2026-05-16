@@ -1,9 +1,12 @@
 import { useRouter } from 'expo-router';
 import { ChevronDown, Phone } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
+import { getApiErrorMessage } from '@/core/api/unwrapResponse';
+import { phoneIdentifierFromDigits } from '@/core/util/phone';
 import { AuthScreenLayout } from '@/features/auth/components/AuthScreenLayout';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useHardwareBackHandler } from '@/features/auth/hooks/useHardwareBackHandler';
 import { useLoginFlowStore } from '@/features/auth/loginFlowStore';
 import { LabeledTextInput } from '@/features/auth/registration/LabeledTextInput';
@@ -17,10 +20,12 @@ function formatPhoneDisplay(digits: string) {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { requestOtp } = useAuth();
   const setStagedPassword = useLoginFlowStore((s) => s.setStagedPassword);
   const clearLoginFlow = useLoginFlowStore((s) => s.clear);
   const [phoneDigits, setPhoneDigits] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const goBack = useCallback(() => {
     clearLoginFlow();
@@ -36,11 +41,18 @@ export default function LoginScreen() {
   const d = phoneDigits.replace(/\D/g, '');
   const phoneOk = d.length >= 10 && d.length <= 11;
   const passwordOk = password.length >= 8;
-  const canContinue = phoneOk && passwordOk;
+  const canContinue = phoneOk && passwordOk && !requestOtp.isPending;
 
-  const onContinue = () => {
-    setStagedPassword(password);
-    router.push({ pathname: '/(auth)/otp', params: { phone: d } });
+  const onContinue = async () => {
+    setError(null);
+    const identifier = phoneIdentifierFromDigits(d);
+    try {
+      await requestOtp.mutateAsync({ identifier, password });
+      setStagedPassword(password);
+      router.push({ pathname: '/(auth)/otp', params: { phone: d } });
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    }
   };
 
   const footer = (
@@ -48,11 +60,15 @@ export default function LoginScreen() {
       accessibilityRole="button"
       accessibilityLabel="Continue"
       disabled={!canContinue}
-      onPress={onContinue}
+      onPress={() => void onContinue()}
       className="mb-2 w-full items-center rounded-xl py-4 active:opacity-90"
       style={{ backgroundColor: ACCENT, opacity: canContinue ? 1 : 0.45 }}
     >
-      <Text className="text-base font-semibold text-white">Continue</Text>
+      {requestOtp.isPending ? (
+        <ActivityIndicator color="#fff" />
+      ) : (
+        <Text className="text-base font-semibold text-white">Continue</Text>
+      )}
     </Pressable>
   );
 
@@ -62,6 +78,8 @@ export default function LoginScreen() {
       <Text className="mt-2 text-base leading-relaxed text-neutral-500">
         Sign in with your phone number and password. We will text you a code to finish signing in.
       </Text>
+
+      {error ? <Text className="mt-4 text-sm text-red-600">{error}</Text> : null}
 
       <View className="mt-8 gap-4">
         <LabeledTextInput
