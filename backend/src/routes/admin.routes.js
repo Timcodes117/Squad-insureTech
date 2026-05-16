@@ -17,6 +17,7 @@ router.get('/claims', c.listClaims);
 
 // Mutations.
 router.post('/claims/:id/approve', c.approveFlaggedClaim);
+router.post('/hospitals', c.createHospital);
 router.post('/hospitals/:id/verify', c.verifyHospital);
 router.post('/hospitals/:id/clear-flag', c.clearHospitalFlag);
 

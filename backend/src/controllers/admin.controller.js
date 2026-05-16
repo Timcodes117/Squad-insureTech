@@ -329,10 +329,20 @@ const listUsers = asyncHandler(async (req, res) => {
     User.countDocuments(query),
   ]);
 
+  // Single batch wallet lookup to avoid N+1 queries.
+  const wallets = await Wallet.find({ userId: { $in: items.map((u) => u._id) } })
+    .select('userId balance')
+    .lean();
+  const balanceByUser = new Map(wallets.map((w) => [String(w.userId), w.balance]));
+  const enriched = items.map((u) => ({
+    ...u,
+    walletBalance: balanceByUser.get(String(u._id)) ?? 0,
+  }));
+
   res.json({
     success: true,
     data: {
-      items,
+      items: enriched,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
     },
   });
@@ -360,6 +370,56 @@ const listHospitals = asyncHandler(async (req, res) => {
     data: {
       items,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    },
+  });
+});
+
+// POST /api/v1/admin/hospitals — admin-driven hospital onboarding. Unlike the
+// public POST /hospital/register (which the hospital itself calls), this is
+// authenticated and the hospital is created pre-verified — the admin has
+// confirmed the bank account out-of-band.
+const createHospital = asyncHandler(async (req, res) => {
+  const { name, contactPhone, email, address, bankCode, accountNumber, accountName } = req.body;
+
+  if (!name || !bankCode || !accountNumber) {
+    throw AppError.badRequest('name, bankCode and accountNumber are required');
+  }
+  if (email) {
+    const dup = await Hospital.findOne({ email }).lean();
+    if (dup) throw AppError.conflict('A hospital with this email already exists');
+  }
+
+  // Try Squad lookup for the account name; fall back to whatever the admin typed
+  // (or the hospital name) if Squad isn't profiled for /payout/account/lookup.
+  let resolvedAccountName = accountName || name;
+  let lookupNote = null;
+  const lookup = await squad.lookupAccount(bankCode, accountNumber);
+  if (lookup.success && lookup.accountName) {
+    resolvedAccountName = lookup.accountName;
+  } else {
+    lookupNote = lookup.error || 'Squad lookup unavailable — using admin-provided name';
+  }
+
+  const hospital = new Hospital({
+    name,
+    contactPhone,
+    email,
+    address,
+    bankCode,
+    accountNumber,
+    accountName: resolvedAccountName,
+    isVerified: true,
+    isActive: true,
+  });
+  await hospital.save();
+
+  logger.info({ hospitalId: hospital.id }, 'admin: hospital created');
+  res.status(201).json({
+    success: true,
+    data: {
+      hospital: hospital.toJSON(),
+      apiKey: hospital.apiKey,
+      lookupNote,
     },
   });
 });
@@ -415,6 +475,7 @@ module.exports = {
   getPool,
   listUsers,
   listHospitals,
+  createHospital,
   verifyHospital,
   listClaims,
 };
