@@ -1,0 +1,53 @@
+# Render blueprint for the BetaHealth backend.
+# After committing this file you can either:
+#   (a) point a new Render Web Service at the repo manually (recommended for
+#       first deploy so you can see what's happening), or
+#   (b) use Render's "Deploy via Blueprint" feature on the dashboard to provision
+#       everything declared below in one click.
+#
+# Secret env vars (sync: false) are intentionally NOT in this file — you'll be
+# prompted to paste their values in the Render dashboard the first time the
+# service deploys. They never get committed to git.
+
+services:
+  - type: web
+    name: betahealth-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    branch: feat/backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SQUAD_BASE_URL
+        value: https://sandbox-api-d.squadco.com
+      - key: API_BASE_URL
+        sync: false
+      # Secrets — paste in the Render dashboard on first deploy.
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SQUAD_SECRET_KEY
+        sync: false
+      - key: SQUAD_PUBLIC_KEY
+        sync: false
+      - key: SQUAD_MERCHANT_ID
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      # Optional — leave blank to disable the cron jobs (admin manual triggers still work).
+      - key: REDIS_URL
+        sync: false
+      # Optional — leave blank to skip real SMS (in-app notifications still work).
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false

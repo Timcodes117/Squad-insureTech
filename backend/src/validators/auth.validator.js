@@ -37,4 +37,23 @@ const verifyOtpBody = Joi.object({
   }),
 });
 
-module.exports = { registerBody, loginBody, requestOtpBody, verifyOtpBody };
+const forgotPasswordBody = Joi.object({
+  identifier: Joi.string().trim().required(),
+});
+
+const resetPasswordBody = Joi.object({
+  identifier: Joi.string().trim().required(),
+  code: Joi.string().length(6).pattern(/^\d+$/).required().messages({
+    'string.pattern.base': 'Reset code must be 6 digits',
+  }),
+  newPassword: Joi.string().min(8).max(128).required(),
+});
+
+module.exports = {
+  registerBody,
+  loginBody,
+  requestOtpBody,
+  verifyOtpBody,
+  forgotPasswordBody,
+  resetPasswordBody,
+};

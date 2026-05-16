@@ -19,4 +19,7 @@ router.post('/me/virtual-account/retry', c.retryVirtualAccount);
 router.get('/me/withdrawable', c.getWithdrawable);
 router.post('/me/withdraw', validateRequest({ body: v.withdrawBody }), c.withdraw);
 
+router.post('/me/premium/pay', c.payPremium);
+router.get('/me/activity', c.getActivity);
+
 module.exports = router;

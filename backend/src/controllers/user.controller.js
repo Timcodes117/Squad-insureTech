@@ -6,11 +6,15 @@ const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const Wallet = require('../models/Wallet');
 const Claim = require('../models/Claim');
+const PoolWallet = require('../models/PoolWallet');
 const squad = require('../services/squad');
 const { notifyUser } = require('../services/notification');
+const { splitPremium } = require('../services/feeSplit');
 const { generateMembershipNumber } = require('../models/User');
 
 const SIX_DAYS_MS = 6 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const COOLDOWN_MS = 72 * 60 * 60 * 1000;
 
 // Locks one week's premium against withdrawal if the user hasn't burned yet
 // this week — otherwise they could pull money that's about to be owed.
@@ -263,18 +267,22 @@ const withdraw = asyncHandler(async (req, res) => {
   });
 });
 
-// Returns the user's membership number + a QR code as a PNG data URL.
-// Generates the membership number lazily for legacy rows that pre-date the
+// Returns the user's membership number. The QR image itself is rendered
+// client-side from `qrPayload` (React Native + every modern web framework has
+// a QR component). Pass `?withImage=true` to also receive a base64 PNG data
+// URL — useful for emailing a card or printing without a client-side renderer.
+// Membership number is lazily generated for legacy rows that pre-date the
 // pre-save hook.
 const getMembershipCard = asyncHandler(async (req, res) => {
   const user = req.user;
+  const withImage = req.query?.withImage === 'true' || req.query?.withImage === true;
 
   if (!user.membershipNumber) {
     user.membershipNumber = generateMembershipNumber();
     try {
       await user.save();
     } catch (err) {
-      // Unique-collision retry (one shot is enough — 30 bits of entropy).
+      // 30 bits of entropy — collisions are vanishingly rare. One retry is enough.
       if (err.code === 11000) {
         user.membershipNumber = generateMembershipNumber();
         await user.save();
@@ -285,27 +293,222 @@ const getMembershipCard = asyncHandler(async (req, res) => {
   }
 
   const payload = user.membershipNumber;
-  let qrCodeDataUrl = null;
-  try {
-    qrCodeDataUrl = await QRCode.toDataURL(payload, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 320,
-    });
-  } catch (err) {
-    logger.warn({ err }, 'card: failed to generate QR — returning payload only');
+  const data = {
+    membershipNumber: user.membershipNumber,
+    fullName: user.fullName,
+    qrPayload: payload,
+  };
+
+  if (withImage) {
+    try {
+      data.qrCodeDataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+      });
+    } catch (err) {
+      logger.warn({ err }, 'card: failed to generate QR image — returning payload only');
+      data.qrCodeDataUrl = null;
+    }
   }
+
+  res.json({ success: true, data });
+});
+
+// POST /api/v1/users/me/premium/pay
+// Manually trigger this week's premium burn. The first call sets firstPremiumAt
+// + activates the user; the 72-hour claim cooldown starts at that moment.
+// Subsequent calls within 6 days return 400 ("already paid this week"). After
+// the first burn the daily 09:00 cron picks the user up on day 7 automatically.
+const payPremium = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const premium = user.weeklyPremium;
+  if (!premium || premium <= 0) {
+    throw AppError.badRequest('No weekly premium configured for this user');
+  }
+
+  if (user.lastPremiumBurnAt) {
+    const last = new Date(user.lastPremiumBurnAt).getTime();
+    if (Date.now() - last < SIX_DAYS_MS) {
+      const nextEligibleAt = new Date(last + SEVEN_DAYS_MS);
+      throw AppError.badRequest(
+        `Premium already paid this week. Next payment due ${nextEligibleAt.toISOString()}.`,
+        {
+          details: {
+            lastPremiumBurnAt: user.lastPremiumBurnAt,
+            nextEligibleAt,
+          },
+        }
+      );
+    }
+  }
+
+  const wallet = await Wallet.findOne({ userId: user._id }).select('balance');
+  if (!wallet || wallet.balance < premium) {
+    throw AppError.badRequest(
+      `Insufficient wallet balance. You need ₦${(premium / 100).toLocaleString()} for this week's premium.`,
+      {
+        details: {
+          available: wallet?.balance ?? 0,
+          required: premium,
+          shortfall: premium - (wallet?.balance ?? 0),
+        },
+      }
+    );
+  }
+
+  const reference = `BURN_${user.id}_${Date.now()}`;
+  const { wallet: updated } = await Wallet.debit({
+    userId: user._id,
+    amount: premium,
+    category: 'premium_burn',
+    reference,
+    description: 'Weekly premium - BetaHealth',
+  });
+
+  const split = splitPremium(premium);
+  if (split.pool > 0) {
+    await PoolWallet.creditPool({
+      amount: split.pool,
+      category: 'premium_burn',
+      reference,
+      description: `Pool share (90%) of premium from user ${user.id}`,
+    });
+  }
+  if (split.platform > 0) {
+    await PoolWallet.creditPlatform({
+      amount: split.platform,
+      reference,
+      description: `Platform share (10%) of premium from user ${user.id}`,
+    });
+  }
+
+  const now = new Date();
+  const isFirst = !user.firstPremiumAt;
+  if (isFirst) user.firstPremiumAt = now;
+  user.lastPremiumBurnAt = now;
+  if (!user.isActive) user.isActive = true;
+  await user.save();
+
+  const claimsUnlockAt = new Date(user.firstPremiumAt.getTime() + COOLDOWN_MS);
+  const nextPaymentAt = new Date(now.getTime() + SEVEN_DAYS_MS);
+
+  await notifyUser(
+    user._id,
+    'premium_burned',
+    isFirst ? 'First premium paid' : 'Weekly premium paid',
+    isFirst
+      ? `BetaHealth: ₦${(premium / 100).toLocaleString()} first premium paid. Your cover is active. Full claims unlock in 72 hours.`
+      : `BetaHealth: ₦${(premium / 100).toLocaleString()} weekly premium paid. Wallet balance: ₦${(updated.balance / 100).toLocaleString()}.`,
+    {
+      premium,
+      balance: updated.balance,
+      poolShare: split.pool,
+      platformShare: split.platform,
+      reference,
+      isFirstPayment: isFirst,
+    }
+  );
+
+  res.json({
+    success: true,
+    message: isFirst
+      ? 'First premium paid — cover is now active'
+      : 'Weekly premium paid',
+    data: {
+      premium,
+      balance: updated.balance,
+      poolShare: split.pool,
+      platformShare: split.platform,
+      reference,
+      isFirstPayment: isFirst,
+      firstPremiumAt: user.firstPremiumAt,
+      lastPremiumBurnAt: user.lastPremiumBurnAt,
+      claimsUnlockAt,
+      nextPaymentAt,
+    },
+  });
+});
+
+// GET /api/v1/users/me/activity
+// Unified recent-activity feed: wallet transactions + claims, merged and
+// sorted newest-first. The standalone /transactions and /claims endpoints
+// still exist if you need just one or the other.
+const getActivity = asyncHandler(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+  const [wallet, claims] = await Promise.all([
+    Wallet.findOne({ userId: req.user._id }).select('ledger balance').lean(),
+    Claim.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate('hospitalId', 'name')
+      .lean(),
+  ]);
+
+  const txItems = (wallet?.ledger || []).map((e) => ({
+    kind: 'transaction',
+    id: String(e._id),
+    type: e.category,
+    direction: e.type,
+    title: titleForTransaction(e),
+    description: e.description,
+    amount: e.amount,
+    balanceAfter: e.balanceAfter,
+    reference: e.reference,
+    createdAt: e.createdAt,
+  }));
+
+  const claimItems = claims.map((c) => ({
+    kind: 'claim',
+    id: String(c._id),
+    type: `claim_${c.status}`,
+    title: `Claim at ${c.hospitalId?.name || 'hospital'}`,
+    description: c.rejectionReason
+      ? c.rejectionReason
+      : c.status === 'paid'
+        ? `Paid ₦${(c.amountCovered / 100).toLocaleString()}${c.amountGap ? ` (₦${(c.amountGap / 100).toLocaleString()} balance owed)` : ''}`
+        : c.status === 'approved'
+          ? `Approved — payout in progress`
+          : c.status === 'flagged'
+            ? 'Under review'
+            : c.treatmentType,
+    amount: c.amount,
+    status: c.status,
+    treatmentType: c.treatmentType,
+    createdAt: c.createdAt,
+  }));
+
+  const merged = [...txItems, ...claimItems]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
 
   res.json({
     success: true,
     data: {
-      membershipNumber: user.membershipNumber,
-      fullName: user.fullName,
-      qrPayload: payload,
-      qrCodeDataUrl,
+      walletBalance: wallet?.balance ?? 0,
+      items: merged,
+      counts: { transactions: txItems.length, claims: claimItems.length, returned: merged.length },
     },
   });
 });
+
+function titleForTransaction(e) {
+  switch (e.category) {
+    case 'funding':
+      return 'Wallet funded';
+    case 'premium_burn':
+      return 'Weekly premium paid';
+    case 'claim_settlement':
+      return 'Claim settlement';
+    case 'withdrawal':
+      return 'Withdrawal';
+    case 'reversal':
+      return 'Refund';
+    default:
+      return e.category;
+  }
+}
 
 module.exports = {
   getWallet,
@@ -315,4 +518,6 @@ module.exports = {
   getWithdrawable,
   withdraw,
   getMembershipCard,
+  payPremium,
+  getActivity,
 };

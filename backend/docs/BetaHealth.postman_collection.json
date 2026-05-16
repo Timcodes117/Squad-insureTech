@@ -18,7 +18,8 @@
     { "key": "preAuthCode", "value": "" },
     { "key": "faceToken", "value": "" },
     { "key": "otpCode", "value": "" },
-    { "key": "membershipNumber", "value": "" }
+    { "key": "membershipNumber", "value": "" },
+    { "key": "resetCode", "value": "" }
   ],
   "item": [
     {
@@ -123,6 +124,40 @@
           }
         },
         {
+          "name": "POST /auth/forgot-password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Sends a 6-digit reset code (15-min expiry) via in-app + SMS + email. Response is generic — never reveals whether the account exists."
+          }
+        },
+        {
+          "name": "POST /auth/reset-password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{userPhone}}\",\n  \"code\": \"{{resetCode}}\",\n  \"newPassword\": \"NewStr0ngP@ss\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Set {{resetCode}} from the code that arrived in SMS/email/notification feed, then run."
+          }
+        },
+        {
           "name": "GET /auth/me",
           "request": {
             "method": "GET",
@@ -144,7 +179,7 @@
           }
         },
         {
-          "name": "GET /users/me/card",
+          "name": "GET /users/me/card (lean — client renders QR)",
           "event": [
             {
               "listen": "test",
@@ -162,7 +197,21 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
             "url": { "raw": "{{baseUrl}}/users/me/card", "host": ["{{baseUrl}}"], "path": ["users", "me", "card"] },
-            "description": "Returns membership number (BH-XXXXXXXXX) + QR code as a PNG data URL. Render qrCodeDataUrl directly in an <img src>. Use the membership number for the future physical card and as an alternative lookup key for hospitals."
+            "description": "Default response: { membershipNumber, fullName, qrPayload }. The client renders the QR from qrPayload — React Native + every web framework has a QR component. Use the membership number for the future physical card and as a lookup key for hospitals scanning the QR."
+          }
+        },
+        {
+          "name": "GET /users/me/card?withImage=true (server-rendered PNG)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/card?withImage=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "card"],
+              "query": [{ "key": "withImage", "value": "true" }]
+            },
+            "description": "Adds qrCodeDataUrl (base64 PNG, ~3-5KB). Use this when the client can't render a QR locally — emailing a card, printing without a client-side renderer."
           }
         },
         {
@@ -195,6 +244,33 @@
                 { "key": "limit", "value": "20" }
               ]
             }
+          }
+        },
+        {
+          "name": "POST /users/me/premium/pay",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/premium/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "premium", "pay"]
+            },
+            "description": "Burns this week's premium from the wallet. First call activates cover + starts the 72-hour cooldown. After that the daily 9am cron handles subsequent weekly burns. Returns 400 if the user already paid this week or has insufficient balance."
+          }
+        },
+        {
+          "name": "GET /users/me/activity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/activity?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "activity"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Unified recent-activity feed: transactions + claims merged newest-first. For the mobile 'recent activity' panel."
           }
         },
         {
@@ -582,6 +658,26 @@
               "host": ["{{baseUrl}}"],
               "path": ["admin", "hospitals", "{{hospitalId}}", "clear-flag"]
             }
+          }
+        },
+        {
+          "name": "POST /admin/dev/fund-user (test-mode wallet top-up)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-admin-key", "value": "{{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{userPhone}}\",\n  \"amountKobo\": 100000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/dev/fund-user",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dev", "fund-user"]
+            },
+            "description": "Frontend test-mode funding. Same effect as a real Squad webhook: credits wallet, flips isActive if balance >= weeklyPremium, fires funding_received + cover_activated notifications. amountKobo is in kobo (₦1,000 = 100000). Body accepts userId OR phone OR membership."
           }
         }
       ]

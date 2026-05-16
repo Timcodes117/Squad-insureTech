@@ -11,9 +11,11 @@ const { runHospitalAnomalyScan } = require('./hospitalAnomalyScan');
 const QUEUE_NAME = 'betahealth-jobs';
 const TZ = 'Africa/Lagos';
 
-// Cron expressions in Africa/Lagos local time.
+// Cron expressions in Africa/Lagos local time. premiumBurn runs daily; the job
+// itself only burns users whose lastPremiumBurnAt is null or 6+ days old, so
+// each user effectively rolls on their own 7-day cycle from their first burn.
 const SCHEDULES = [
-  { name: 'premiumBurn', pattern: '0 9 * * 1', handler: () => runPremiumBurn({}) },
+  { name: 'premiumBurn', pattern: '0 9 * * *', handler: () => runPremiumBurn({}) },
   { name: 'coverageReset', pattern: '30 0 * * *', handler: () => runCoverageReset({}) },
   { name: 'hospitalAnomalyScan', pattern: '0 1 * * *', handler: () => runHospitalAnomalyScan({}) },
 ];

@@ -23,12 +23,23 @@ const schema = Joi.object({
   SQUAD_PUBLIC_KEY: Joi.string().allow('').optional(),
   SQUAD_BENEFICIARY_ACCOUNT: Joi.string().allow('').optional(),
   SQUAD_MERCHANT_ID: Joi.string().allow('').optional(),
+  // When true, lookupAccount + initiateTransfer return mocked success. Used for
+  // local/demo runs when Squad sandbox has not enabled payout endpoints on the
+  // merchant. Must be false in production.
+  SQUAD_MOCK_PAYOUTS: Joi.boolean().truthy('true').falsy('false').default(false),
 
   ADMIN_KEY: Joi.string().min(8).default('local_dev_admin_key_change_me'),
 
   TWILIO_ACCOUNT_SID: Joi.string().allow('').optional(),
   TWILIO_AUTH_TOKEN: Joi.string().allow('').optional(),
   TWILIO_PHONE_NUMBER: Joi.string().allow('').optional(),
+
+  SMTP_HOST: Joi.string().allow('').optional(),
+  SMTP_PORT: Joi.number().integer().min(1).max(65535).default(587),
+  SMTP_SECURE: Joi.boolean().truthy('true').falsy('false').default(false),
+  SMTP_USER: Joi.string().allow('').optional(),
+  SMTP_PASS: Joi.string().allow('').optional(),
+  SMTP_FROM: Joi.string().allow('').optional(),
 
   API_BASE_URL: Joi.string().uri().default('http://localhost:4000'),
 }).unknown(true);
@@ -70,6 +81,7 @@ const config = Object.freeze({
     publicKey: value.SQUAD_PUBLIC_KEY || null,
     beneficiaryAccount: value.SQUAD_BENEFICIARY_ACCOUNT || null,
     merchantId: value.SQUAD_MERCHANT_ID || null,
+    mockPayouts: value.SQUAD_MOCK_PAYOUTS,
   },
 
   admin: {
@@ -80,6 +92,15 @@ const config = Object.freeze({
     accountSid: value.TWILIO_ACCOUNT_SID || null,
     authToken: value.TWILIO_AUTH_TOKEN || null,
     phoneNumber: value.TWILIO_PHONE_NUMBER || null,
+  },
+
+  smtp: {
+    host: value.SMTP_HOST || null,
+    port: value.SMTP_PORT,
+    secure: value.SMTP_SECURE,
+    user: value.SMTP_USER || null,
+    pass: value.SMTP_PASS || null,
+    from: value.SMTP_FROM || null,
   },
 
   api: {

@@ -246,12 +246,13 @@ const schemas = {
       fullName: { type: 'string', example: 'Adaeze Mature' },
       qrPayload: {
         type: 'string',
-        description: 'String encoded inside the QR — currently the membership number itself.',
+        description: 'String to encode into the QR (currently the membership number itself). Clients render the QR locally.',
         example: 'BH-AB23JKL5M',
       },
       qrCodeDataUrl: {
         type: 'string',
-        description: 'PNG data URL (base64) — render directly in <img src>.',
+        nullable: true,
+        description: 'Base64 PNG. Only present when ?withImage=true.',
         example: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
       },
     },
@@ -378,6 +379,7 @@ const schemas = {
           'preauth_code',
           'login_otp',
           'face_verified',
+          'password_reset',
           'system',
         ],
       },
@@ -395,6 +397,16 @@ const schemas = {
               sent: { type: 'boolean' },
               sentAt: { type: 'string', format: 'date-time', nullable: true },
               sid: { type: 'string', nullable: true },
+              error: { type: 'string', nullable: true },
+            },
+          },
+          email: {
+            type: 'object',
+            properties: {
+              sent: { type: 'boolean' },
+              sentAt: { type: 'string', format: 'date-time', nullable: true },
+              messageId: { type: 'string', nullable: true },
+              address: { type: 'string', nullable: true },
               error: { type: 'string', nullable: true },
             },
           },
@@ -609,6 +621,68 @@ const paths = {
       },
     },
   },
+  '/auth/forgot-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Send a password reset code',
+      description:
+        'Issues a 6-digit reset code (15-minute expiry) and sends it via in-app notification + SMS + email. Response is always success — never confirms or denies whether the account exists, to prevent enumeration.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identifier'],
+              properties: { identifier: { type: 'string', example: '08099000010' } },
+            },
+            example: { identifier: '08099000010' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generic acknowledgement',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'If an account exists for that identifier, a reset code has been sent.',
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  '/auth/reset-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Reset password using the code from /forgot-password',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identifier', 'code', 'newPassword'],
+              properties: {
+                identifier: { type: 'string', example: '08099000010' },
+                code: { type: 'string', pattern: '^\\d{6}$', example: '123456' },
+                newPassword: { type: 'string', minLength: 8, example: 'NewStr0ngP@ss' },
+              },
+            },
+            example: { identifier: '08099000010', code: '123456', newPassword: 'NewStr0ngP@ss' },
+          },
+        },
+      },
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        400: { $ref: '#/components/responses/Error400' },
+      },
+    },
+  },
   '/auth/me': {
     get: {
       tags: ['Auth'],
@@ -633,23 +707,46 @@ const paths = {
   '/users/me/card': {
     get: {
       tags: ['Users'],
-      summary: 'Membership card (number + QR code data URL)',
+      summary: 'Membership card (number + QR payload)',
       description:
-        'Returns the user\'s BH-XXXXXXXXX membership number plus a QR code as a PNG data URL. Use for the in-app digital card and the future physical card print. Membership number is generated lazily on first read for legacy rows.',
+        'Returns the user\'s BH-XXXXXXXXX membership number and the string to encode into a QR. By default the client renders the QR (React Native and every modern web framework has a component for this). Pass `?withImage=true` to also receive a base64 PNG data URL — useful for emailing a card or printing without a client-side renderer. Membership number is generated lazily on first read for legacy rows.',
       security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: 'withImage',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean', default: false },
+          description: 'When true, response includes `qrCodeDataUrl` (base64 PNG).',
+        },
+      ],
       responses: {
         200: {
           description: 'Card payload',
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ApiSuccess' },
-              example: {
-                success: true,
-                data: {
-                  membershipNumber: 'BH-AB23JKL5M',
-                  fullName: 'Adaeze Mature',
-                  qrPayload: 'BH-AB23JKL5M',
-                  qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+              examples: {
+                'default (lean)': {
+                  value: {
+                    success: true,
+                    data: {
+                      membershipNumber: 'BH-AB23JKL5M',
+                      fullName: 'Adaeze Mature',
+                      qrPayload: 'BH-AB23JKL5M',
+                    },
+                  },
+                },
+                'with image': {
+                  value: {
+                    success: true,
+                    data: {
+                      membershipNumber: 'BH-AB23JKL5M',
+                      fullName: 'Adaeze Mature',
+                      qrPayload: 'BH-AB23JKL5M',
+                      qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEU...',
+                    },
+                  },
                 },
               },
             },
@@ -800,6 +897,101 @@ const paths = {
       responses: {
         200: { $ref: '#/components/responses/Success200' },
         400: { $ref: '#/components/responses/Error400' },
+      },
+    },
+  },
+  '/users/me/premium/pay': {
+    post: {
+      tags: ['Users'],
+      summary: 'Pay this week\'s premium manually (kicks off the cycle)',
+      description:
+        'Burns one week of the user\'s premium from their wallet. The first call activates cover, sets firstPremiumAt, and starts the 72-hour claims cooldown. After the first burn the daily 09:00 Africa/Lagos cron handles subsequent weekly burns automatically (per-user rolling 7-day cycle). Returns 400 if the user already paid this week, or if balance < weeklyPremium.',
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: 'Burn complete',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                message: 'First premium paid — cover is now active',
+                data: {
+                  premium: 50000,
+                  balance: 950000,
+                  poolShare: 45000,
+                  platformShare: 5000,
+                  reference: 'BURN_6a07...',
+                  isFirstPayment: true,
+                  firstPremiumAt: '2026-05-16T01:00:00.000Z',
+                  lastPremiumBurnAt: '2026-05-16T01:00:00.000Z',
+                  claimsUnlockAt: '2026-05-19T01:00:00.000Z',
+                  nextPaymentAt: '2026-05-23T01:00:00.000Z',
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: '#/components/responses/Error400' },
+      },
+    },
+  },
+  '/users/me/activity': {
+    get: {
+      tags: ['Users'],
+      summary: 'Unified recent-activity feed (transactions + claims, newest-first)',
+      description:
+        'Merges wallet ledger entries and claims into one chronologically sorted feed. Use this for the "recent activity" panel in the app. /users/me/transactions and /users/me/claims still exist if you want one or the other.',
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Activity feed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ApiSuccess' },
+              example: {
+                success: true,
+                data: {
+                  walletBalance: 950000,
+                  items: [
+                    {
+                      kind: 'claim',
+                      id: '6a07...',
+                      type: 'claim_paid',
+                      title: 'Claim at BetaHealth Demo Clinic',
+                      description: 'Paid ₦1,500',
+                      amount: 150000,
+                      status: 'paid',
+                      treatmentType: 'malaria',
+                      createdAt: '2026-05-16T01:30:00.000Z',
+                    },
+                    {
+                      kind: 'transaction',
+                      id: '6a06...',
+                      type: 'premium_burn',
+                      direction: 'debit',
+                      title: 'Weekly premium paid',
+                      description: 'Weekly premium - BetaHealth',
+                      amount: 50000,
+                      balanceAfter: 950000,
+                      reference: 'BURN_...',
+                      createdAt: '2026-05-16T01:00:00.000Z',
+                    },
+                  ],
+                  counts: { transactions: 2, claims: 1, returned: 3 },
+                },
+              },
+            },
+          },
+        },
       },
     },
   },
@@ -1115,6 +1307,42 @@ const paths = {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         200: { $ref: '#/components/responses/Success200' },
+        404: { $ref: '#/components/responses/Error404' },
+      },
+    },
+  },
+  '/admin/dev/fund-user': {
+    post: {
+      tags: ['Admin'],
+      summary: 'Dev-only: credit a user wallet without going through a Squad webhook',
+      description:
+        'Simulates a Squad funding webhook from the API. Same end-state as the real webhook: idempotent credit, isActive flip when balance crosses weeklyPremium, funding_received + cover_activated notifications. Use this from the frontend in test mode instead of running scripts/simulateWebhook.js from a terminal. Production must keep ADMIN_KEY rotated and ideally remove this route.',
+      security: [{ adminKey: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['amountKobo'],
+              properties: {
+                userId: { type: 'string', description: 'Mongo _id of the user. One of userId/phone/membership is required.' },
+                phone: { type: 'string', example: '08099000030' },
+                membership: { type: 'string', example: 'BH-AB23JKL5M' },
+                amountKobo: { type: 'integer', minimum: 1, example: 100000, description: '₦1,000 = 100000' },
+                reference: {
+                  type: 'string',
+                  description: 'Optional. Pass the same reference twice to verify the idempotency guard.',
+                },
+              },
+            },
+            example: { phone: '08099000030', amountKobo: 100000 },
+          },
+        },
+      },
+      responses: {
+        200: { $ref: '#/components/responses/Success200' },
+        400: { $ref: '#/components/responses/Error400' },
         404: { $ref: '#/components/responses/Error404' },
       },
     },
