@@ -17,6 +17,8 @@ const schema = Joi.object({
 
   JWT_SECRET: Joi.string().min(16).required(),
   JWT_EXPIRES_IN: Joi.string().default('7d'),
+  JWT_HOSPITAL_EXPIRES_IN: Joi.string().default('10m'),
+  JWT_PATIENT_VERIFY_EXPIRES_IN: Joi.string().default('10m'),
 
   SQUAD_BASE_URL: Joi.string().uri().default('https://sandbox-api-d.squadco.com'),
   SQUAD_SECRET_KEY: Joi.string().required(),
@@ -73,6 +75,8 @@ const config = Object.freeze({
   jwt: {
     secret: value.JWT_SECRET,
     expiresIn: value.JWT_EXPIRES_IN,
+    hospitalExpiresIn: value.JWT_HOSPITAL_EXPIRES_IN,
+    patientVerifyExpiresIn: value.JWT_PATIENT_VERIFY_EXPIRES_IN,
   },
 
   squad: {
